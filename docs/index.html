@@ -1,0 +1,150 @@
+<title>עם עברית</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --bg: #F6F4EE; --surface: #FFFFFF; --line: #E3DFD3;
+    --text: #1B1D2A; --muted: #6B6F85; --accent: #B9821F; --accent-ink: #1B1D2A;
+    --chip: #EFE9D8; --teal: #2E8C7C;
+    --display: "Frank Ruhl Libre", "Times New Roman", serif;
+    --body: "Heebo", "Arial Hebrew", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11131C; --surface: #1B1E2B; --line: #2A2E40;
+      --text: #ECEAF2; --muted: #9A9DB3; --accent: #E8B04B; --accent-ink: #11131C;
+      --chip: #262A3B; --teal: #5FB7A6; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11131C; --surface: #1B1E2B; --line: #2A2E40;
+    --text: #ECEAF2; --muted: #9A9DB3; --accent: #E8B04B; --accent-ink: #11131C;
+    --chip: #262A3B; --teal: #5FB7A6; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--body); direction: rtl; padding-inline: 16px; padding-block: 20px 40px; }
+  .wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 20px; }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(28px, 5vw, 40px); margin: 0; text-wrap: balance; line-height: 1.1; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 120px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; letter-spacing: .02em; }
+  .install { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+  .install label { font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  code { font-family: Consolas, Menlo, monospace; font-size: 13px; direction: ltr; background: var(--chip); padding: 6px 10px; border-radius: 6px; overflow-wrap: anywhere; flex: 1; min-width: 200px; }
+  button { font-family: var(--body); font-size: 14px; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chipset { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { background: var(--chip); color: var(--text); font-weight: 500; padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  input[type=search] { font-family: var(--body); font-size: 15px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); flex: 1; min-width: 180px; }
+  h2 { font-family: var(--display); font-weight: 500; font-size: 22px; margin: 8px 0 0; display: flex; align-items: baseline; gap: 10px; }
+  h2 small { font-family: var(--body); color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+  .card img { width: 100%; max-width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; background: var(--chip); }
+  .card .t { padding: 8px 8px 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+  .card .s { padding: 4px 8px 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .src { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--chip); color: var(--text); }
+  .src.wizdom { color: var(--teal); }
+  .empty { color: var(--muted); font-size: 14px; }
+  @media (prefers-reduced-motion: no-preference) { .card { transition: transform .15s ease; } .card:hover { transform: translateY(-2px); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>סרטים וסדרות עם כתוביות בעברית</h1>
+    <p class="sub" id="updated">טוען...</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><b id="n-movie">-</b><span>סרטים עם עברית</span></div>
+    <div class="stat"><b id="n-series">-</b><span>סדרות עם עברית</span></div>
+    <div class="stat"><b>Ktuvit + Wizdom</b><span>מקורות הכתוביות</span></div>
+  </div>
+
+  <div class="install">
+    <label for="install-url">התקנה ב-Stremio: מעתיקים את הקישור ומדביקים בתיבת "חיפוש תוספים", או פותחים אותו ישירות</label>
+    <div class="row">
+      <code id="install-url">...</code>
+      <button type="button" id="copy-btn">העתק</button>
+      <a id="open-link" href="#" style="color:var(--accent);font-weight:700;font-size:14px">פתח ב-Stremio</a>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="chipset" role="group" aria-label="מיון">
+      <button type="button" class="chip" data-cat="heb-new" aria-pressed="true">חדש</button>
+      <button type="button" class="chip" data-cat="heb-popular" aria-pressed="false">פופולרי</button>
+    </div>
+    <input type="search" id="q" placeholder="חיפוש לפי שם" aria-label="חיפוש לפי שם">
+  </div>
+
+  <section>
+    <h2>סרטים <small id="c-movie"></small></h2>
+    <div class="grid" id="g-movie"></div>
+  </section>
+  <section>
+    <h2>סדרות <small id="c-series"></small></h2>
+    <div class="grid" id="g-series"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var base = location.href.replace(/[#?].*$/, '').replace(/index\.html$/, '').replace(/\/$/, '');
+  var manifest = base + '/manifest.json';
+  var el = function (id) { return document.getElementById(id); };
+  function setInstall(u) {
+    manifest = u;
+    el('install-url').textContent = u;
+    el('open-link').href = u.replace(/^https?:\/\//, 'stremio://');
+  }
+  setInstall(manifest);
+  fetch('worker.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (w) { if (w && w.url) setInstall(w.url); }).catch(function () {});
+  el('copy-btn').addEventListener('click', function () {
+    var done = function () { el('copy-btn').textContent = 'הועתק'; setTimeout(function () { el('copy-btn').textContent = 'העתק'; }, 1500); };
+    try { navigator.clipboard.writeText(manifest).then(done, function () { selectText(); }); } catch (e) { selectText(); }
+  });
+  function selectText() { var r = document.createRange(); r.selectNodeContents(el('install-url')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+  var data = { movie: {}, series: {} };
+  var cat = 'heb-new';
+
+  function render() {
+    var q = el('q').value.trim().toLowerCase();
+    ['movie', 'series'].forEach(function (type) {
+      var metas = (data[type][cat] || []).filter(function (m) { return !q || String(m.name).toLowerCase().indexOf(q) >= 0; });
+      el('c-' + type).textContent = metas.length ? metas.length + ' כותרים' : '';
+      el('g-' + type).innerHTML = metas.length ? metas.map(function (m) {
+        return '<div class="card"><img loading="lazy" alt="" src="' + (m.poster || '') + '">' +
+          '<div class="t">' + esc(m.name) + '</div>' +
+          '<div class="s"><span>' + esc(m.releaseInfo || '') + '</span>' + (m.imdbRating ? '<span>IMDb ' + esc(m.imdbRating) + '</span>' : '') + '</div></div>';
+      }).join('') : '<p class="empty">אין תוצאות</p>';
+    });
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  document.querySelectorAll('.chip').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+      b.setAttribute('aria-pressed', 'true'); cat = b.dataset.cat; render();
+    });
+  });
+  el('q').addEventListener('input', render);
+
+  var jobs = [];
+  ['movie', 'series'].forEach(function (type) {
+    ['heb-new', 'heb-popular'].forEach(function (c) {
+      jobs.push(fetch('catalog/' + type + '/' + c + '.json').then(function (r) { return r.json(); }).then(function (j) { data[type][c] = j.metas || []; }).catch(function () { data[type][c] = []; }));
+    });
+  });
+  jobs.push(fetch('summary.json').then(function (r) { return r.json(); }).then(function (s) {
+    el('n-movie').textContent = s.totals.movie; el('n-series').textContent = s.totals.series;
+    var d = new Date(s.generatedAt);
+    el('updated').textContent = 'עודכן ' + d.toLocaleDateString('he-IL') + ' ' + d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + ' · מציג עד 200 בכל רשימה';
+  }).catch(function () { el('updated').textContent = ''; }));
+  Promise.all(jobs).then(render);
+})();
+</script>
