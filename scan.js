@@ -163,7 +163,8 @@ function sortCatalog(list, catId) {
 const CATALOG_IDS = ['heb-cinema-new', 'heb-new', 'heb-popular', ...GENRES.map(g => `heb-genre-${g.key}`)];
 
 function writeDocs(cache) {
-  for (const m of Object.values(cache.items)) if (m.hasHebrew && !m.hebrewSince) m.hebrewSince = m.checkedAt || Date.now();
+  // titles that already had Hebrew before tracking started: order them by release date
+  for (const m of Object.values(cache.items)) if (m.hasHebrew && !m.hebrewSince) m.hebrewSince = Date.parse(m.released || '') || 0;
   const items = Object.values(cache.items).filter(m => m.hasHebrew && m.name);
   const compact = items.map(m => ({
     id: m.id, type: m.type, name: m.name, poster: m.poster, description: m.description, year: m.year,
