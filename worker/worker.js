@@ -37,7 +37,10 @@ const MANIFEST = {
   resources: ['catalog'],
   types: ['movie', 'series'],
   idPrefixes: ['tt'],
-  catalogs: [...catalogsFor('series'), ...catalogsFor('movie')],
+  catalogs: [
+    { type: 'movie', id: 'heb-cinema-new', name: 'קולנוע: חדש בעברית', extra: EXTRA },
+    ...catalogsFor('series'), ...catalogsFor('movie'),
+  ],
   behaviorHints: { configurable: false, configurationRequired: false },
 };
 
@@ -79,7 +82,13 @@ function parseExtra(seg) {
 
 function catalog(items, type, catId, extra) {
   let list = items.filter(m => m.type === type);
-  if (catId === 'heb-new') list = list.filter(isRecent).sort(byReleased);
+  if (catId === 'heb-cinema-new') {
+    if (type !== 'movie') return null;
+    const cutoff = Date.now() - 180 * 864e5;
+    list = list.filter(m => m.released && Date.parse(m.released) >= cutoff)
+      .sort((a, b) => ((b.hebrewSince || 0) - (a.hebrewSince || 0)) || byReleased(a, b));
+  }
+  else if (catId === 'heb-new') list = list.filter(isRecent).sort(byReleased);
   else if (catId === 'heb-popular') list = list.sort(byPop);
   else {
     const g = GENRES.find(x => `heb-genre-${x.key}` === catId);

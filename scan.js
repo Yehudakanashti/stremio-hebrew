@@ -147,20 +147,28 @@ const GENRES = require('./genres.js');
 
 function sortCatalog(list, catId) {
   const byPop = (a, b) => (a.popRank ?? 99999) - (b.popRank ?? 99999);
-  if (catId === 'heb-new') return list.filter(isRecent).sort((a, b) => String(b.released || '').localeCompare(String(a.released || '')));
+  const byReleased = (a, b) => String(b.released || '').localeCompare(String(a.released || ''));
+  if (catId === 'heb-cinema-new') {
+    const cutoff = Date.now() - 180 * 864e5;
+    return list.filter(m => m.type === 'movie' && m.released && Date.parse(m.released) >= cutoff)
+      .sort((a, b) => ((b.hebrewSince || 0) - (a.hebrewSince || 0)) || byReleased(a, b));
+  }
+  if (catId === 'heb-new') return list.filter(isRecent).sort(byReleased);
   if (catId === 'heb-popular') return list.slice().sort(byPop);
   const g = GENRES.find(x => `heb-genre-${x.key}` === catId);
   const tags = new Set((g ? g.tags : []).map(t => t.toLowerCase()));
   return list.filter(m => (m.genres || []).some(x => tags.has(String(x).toLowerCase()))).sort(byPop);
 }
 
-const CATALOG_IDS = ['heb-new', 'heb-popular', ...GENRES.map(g => `heb-genre-${g.key}`)];
+const CATALOG_IDS = ['heb-cinema-new', 'heb-new', 'heb-popular', ...GENRES.map(g => `heb-genre-${g.key}`)];
 
 function writeDocs(cache) {
+  for (const m of Object.values(cache.items)) if (m.hasHebrew && !m.hebrewSince) m.hebrewSince = m.checkedAt || Date.now();
   const items = Object.values(cache.items).filter(m => m.hasHebrew && m.name);
   const compact = items.map(m => ({
     id: m.id, type: m.type, name: m.name, poster: m.poster, description: m.description, year: m.year,
     released: m.released, imdbRating: m.imdbRating, genres: m.genres, popRank: m.popRank, sources: m.sources,
+    hebrewSince: m.hebrewSince,
   }));
   fs.mkdirSync(DOCS, { recursive: true });
   fs.writeFileSync(path.join(DOCS, 'index.json'), JSON.stringify({ generatedAt: new Date().toISOString(), items: compact }));
@@ -169,6 +177,7 @@ function writeDocs(cache) {
     const dir = path.join(DOCS, 'catalog', type);
     fs.mkdirSync(dir, { recursive: true });
     for (const catId of CATALOG_IDS) {
+      if (catId === 'heb-cinema-new' && type !== 'movie') continue;
       const sorted = sortCatalog(items.filter(m => m.type === type), catId);
       counts[`${type}/${catId}`] = sorted.length;
       const pages = catId.startsWith('heb-genre-') ? 1 : STATIC_PAGES;
@@ -225,6 +234,7 @@ async function main() {
       const r = await checkHebrew(e.type, e.id);
       if (r.hasHebrew && !e.hasHebrew) {
         found++;
+        e.hebrewSince = Date.now();
         log(`NEW: ${e.type} ${e.name} (${e.id}) via ${r.sources.join(',')}`);
         if (isTheatricalRecent(e) && !e.notifiedAt) { e.notifiedAt = Date.now(); toNotify.push(e); }
       }

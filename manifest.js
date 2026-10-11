@@ -23,7 +23,10 @@ module.exports = function manifest({ dynamic }) {
     resources: ['catalog'],
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
-    catalogs: [...catalogsFor('series', extra), ...catalogsFor('movie', extra)],
+    catalogs: [
+      { type: 'movie', id: 'heb-cinema-new', name: 'קולנוע: חדש בעברית', extra },
+      ...catalogsFor('series', extra), ...catalogsFor('movie', extra),
+    ],
     behaviorHints: { configurable: false, configurationRequired: false },
   };
 };
