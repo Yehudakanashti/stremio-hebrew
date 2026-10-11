@@ -25,6 +25,44 @@ const STATIC_PAGES = 5;
 
 const log = m => console.log(`${new Date().toISOString()} ${m}`);
 
+// Push notifications for cinema releases that just got Hebrew subtitles.
+const THEATRICAL_WINDOW_DAYS = 150;
+const SITE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/';
+
+function isTheatricalRecent(e) {
+  if (e.type !== 'movie' || !e.released) return false;
+  const days = (Date.now() - Date.parse(e.released)) / 864e5;
+  return days >= 0 && days <= THEATRICAL_WINDOW_DAYS;
+}
+
+async function notify(items) {
+  if (!items.length) return;
+  const lines = items.map(m => `• ${m.name} (${m.year || ''})${m.imdbRating ? ` · IMDb ${m.imdbRating}` : ''}`);
+  const title = items.length === 1 ? 'סרט קולנוע קיבל כתוביות בעברית' : `${items.length} סרטי קולנוע קיבלו כתוביות בעברית`;
+  const message = lines.join('\n') + '\n\nזמין עכשיו ב-Stremio בשורה "סרטים חדשים עם עברית".';
+  const topic = process.env.NTFY_TOPIC;
+  if (topic) {
+    try {
+      const r = await fetch('https://ntfy.sh/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, title, message, click: SITE_URL, tags: ['clapper'], priority: 4 }),
+      });
+      log(`ntfy: ${r.status}`);
+    } catch (e) { log('ntfy failed ' + e.message); }
+  }
+  const tg = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
+  if (tg && chat) {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${tg}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chat, text: `${title}\n${message}` }),
+      });
+      log(`telegram: ${r.status}`);
+    } catch (e) { log('telegram failed ' + e.message); }
+  }
+  if (!topic && !(tg && chat)) log('notify: no channel configured, skipped');
+}
+
 function loadCache() {
   try { const d = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); return { items: d.items || {}, lastScanEnd: d.lastScanEnd || null }; }
   catch { return { items: {}, lastScanEnd: null }; }
@@ -155,6 +193,10 @@ async function main() {
   const cache = loadCache();
   log(`cache: ${Object.keys(cache.items).length} items`);
   if (process.argv.includes('--docs-only')) { writeDocs(cache); return; }
+  if (process.argv.includes('--notify-test')) {
+    await notify([{ name: 'בדיקה: Mutiny', year: '2026', imdbRating: '5.8' }]);
+    return;
+  }
   const now = Date.now();
   const queue = [];
   for (const type of TYPES) {
@@ -175,12 +217,17 @@ async function main() {
   if (queue.length > MAX_CHECKS) queue.length = MAX_CHECKS;
   log(`to check: ${queue.length}`);
   let done = 0, found = 0;
+  const toNotify = [];
   const worker = async () => {
     while (queue.length) {
       const key = queue.shift();
       const e = cache.items[key];
       const r = await checkHebrew(e.type, e.id);
-      if (r.hasHebrew && !e.hasHebrew) { found++; log(`NEW: ${e.type} ${e.name} (${e.id}) via ${r.sources.join(',')}`); }
+      if (r.hasHebrew && !e.hasHebrew) {
+        found++;
+        log(`NEW: ${e.type} ${e.name} (${e.id}) via ${r.sources.join(',')}`);
+        if (isTheatricalRecent(e) && !e.notifiedAt) { e.notifiedAt = Date.now(); toNotify.push(e); }
+      }
       e.hasHebrew = r.hasHebrew; e.sources = r.sources; e.allFailed = r.allFailed; e.checkedAt = Date.now();
       done++;
       if (done % 100 === 0) log(`checked ${done}`);
@@ -192,7 +239,8 @@ async function main() {
   fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
   fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
   writeDocs(cache);
-  log(`done: checked ${done}, newly found ${found}`);
+  await notify(toNotify);
+  log(`done: checked ${done}, newly found ${found}, notified ${toNotify.length}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

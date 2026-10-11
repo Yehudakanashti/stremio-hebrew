@@ -22,6 +22,10 @@ jobs:
         with:
           node-version: 22
       - run: node scan.js
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       - name: commit results
         run: |
           git config user.name "scan-bot"
