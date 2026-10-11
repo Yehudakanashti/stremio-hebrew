@@ -105,10 +105,18 @@ function toMeta(m) {
   };
 }
 
+const GENRES = require('./genres.js');
+
 function sortCatalog(list, catId) {
+  const byPop = (a, b) => (a.popRank ?? 99999) - (b.popRank ?? 99999);
   if (catId === 'heb-new') return list.filter(isRecent).sort((a, b) => String(b.released || '').localeCompare(String(a.released || '')));
-  return list.slice().sort((a, b) => (a.popRank ?? 99999) - (b.popRank ?? 99999));
+  if (catId === 'heb-popular') return list.slice().sort(byPop);
+  const g = GENRES.find(x => `heb-genre-${x.key}` === catId);
+  const tags = new Set((g ? g.tags : []).map(t => t.toLowerCase()));
+  return list.filter(m => (m.genres || []).some(x => tags.has(String(x).toLowerCase()))).sort(byPop);
 }
+
+const CATALOG_IDS = ['heb-new', 'heb-popular', ...GENRES.map(g => `heb-genre-${g.key}`)];
 
 function writeDocs(cache) {
   const items = Object.values(cache.items).filter(m => m.hasHebrew && m.name);
@@ -122,10 +130,11 @@ function writeDocs(cache) {
   for (const type of TYPES) {
     const dir = path.join(DOCS, 'catalog', type);
     fs.mkdirSync(dir, { recursive: true });
-    for (const catId of ['heb-new', 'heb-popular']) {
+    for (const catId of CATALOG_IDS) {
       const sorted = sortCatalog(items.filter(m => m.type === type), catId);
       counts[`${type}/${catId}`] = sorted.length;
-      for (let p = 0; p < STATIC_PAGES; p++) {
+      const pages = catId.startsWith('heb-genre-') ? 1 : STATIC_PAGES;
+      for (let p = 0; p < pages; p++) {
         const metas = sorted.slice(p * PAGE, (p + 1) * PAGE).map(toMeta);
         const file = p === 0 ? `${catId}.json` : `${catId}/skip=${p * PAGE}.json`;
         fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
