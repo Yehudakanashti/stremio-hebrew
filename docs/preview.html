@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>עם עברית - תצוגה מקדימה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117; --panel: #181b24; --line: #272b38; --text: #f3f4f8; --muted: #9aa0b4;
+    --accent: #e8b04b; --card: #1d2130;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Heebo", "Arial Hebrew", Arial, sans-serif; }
+  body { padding-inline: 16px; padding-block: 18px 60px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  .banner { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 4px; margin-bottom: 22px; }
+  .banner b { font-size: 18px; }
+  .banner span { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .pill { display: inline-block; background: var(--accent); color: #1b1d2a; font-weight: 800; font-size: 12px; border-radius: 999px; padding: 2px 10px; margin-inline-start: 8px; vertical-align: middle; }
+  .stremio-row { margin-bottom: 18px; opacity: .55; }
+  .stremio-row h2 { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+  .stremio-row p { margin: 0; color: var(--muted); font-size: 13px; }
+  section.row { margin: 0 0 26px; }
+  section.row h2 { font-size: 20px; font-weight: 700; margin: 0 0 10px; display: flex; align-items: baseline; gap: 10px; }
+  section.row h2 small { color: var(--muted); font-weight: 400; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .track { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: thin; scrollbar-color: #3a3f52 transparent; }
+  .card { flex: 0 0 auto; width: 148px; text-decoration: none; color: inherit; }
+  .card.landscape { width: 272px; }
+  .thumb { width: 100%; aspect-ratio: 2 / 3; border-radius: 8px; background: var(--card) center / cover no-repeat; border: 1px solid var(--line); transition: transform .15s ease, border-color .15s ease; }
+  .card.landscape .thumb { aspect-ratio: 16 / 9; }
+  .card:hover .thumb { transform: scale(1.04); border-color: var(--accent); }
+  .name { margin-top: 7px; font-size: 14px; line-height: 1.3; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .skeleton .thumb { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+  .foot { color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 30px; border-top: 1px solid var(--line); padding-top: 14px; }
+  @media (prefers-reduced-motion: reduce) { .thumb, .skeleton .thumb { transition: none; animation: none; } }
+  @media (max-width: 520px) { .card { width: 120px; } .card.landscape { width: 220px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">
+    <b>תצוגה מקדימה של מסך הבית <span class="pill">עוד לא הותקן</span></b>
+    <span>כך ייראו השורות של "עם עברית" בגרסה החדשה (3.0). הנתונים והתמונות אמיתיים ונמשכים עכשיו מהשרת. בשורות הרחבות מוצגת תמונת רקע, ובשאר פוסטר.</span>
+  </div>
+
+  <div class="stremio-row">
+    <h2>המשך לצפות</h2>
+    <p>שורה מובנית של Stremio, מופיעה לבד אחרי שמתחילים לצפות במשהו. ממש מתחתיה מתחילות השורות שלנו.</p>
+  </div>
+
+  <div id="rows"></div>
+
+  <div class="foot">
+    אחרי השורות שלנו ממשיכות השורות הרגילות של Cinemeta (Popular, Featured), YouTube ו-WatchHub, אלא אם נבקש להסתיר אותן.
+    כותרים בשורה "טופ 10" ממוספרים בשם ("1. Silo"). שורות ללא כותרים לא מוצגות.
+  </div>
+</div>
+
+<script>
+(function () {
+  var API = 'https://stremio-hebrew.hod450.workers.dev';
+  var rowsEl = document.getElementById('rows');
+  var PER_ROW = 14;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function skeleton(cat) {
+    var sec = document.createElement('section');
+    sec.className = 'row';
+    sec.innerHTML = '<h2>' + esc(cat.name) + '<small>טוען...</small></h2><div class="track"></div>';
+    var track = sec.querySelector('.track');
+    for (var i = 0; i < 6; i++) { var c = document.createElement('div'); c.className = 'card skeleton'; c.innerHTML = '<div class="thumb"></div>'; track.appendChild(c); }
+    return sec;
+  }
+
+  function fill(sec, cat, metas) {
+    var h = sec.querySelector('h2 small');
+    if (!metas.length) { sec.remove(); return; }
+    h.textContent = metas.length >= 100 ? '100+ כותרים' : metas.length + ' כותרים';
+    var track = sec.querySelector('.track');
+    track.innerHTML = '';
+    metas.slice(0, PER_ROW).forEach(function (m) {
+      var a = document.createElement('a');
+      a.className = 'card' + (m.posterShape === 'landscape' ? ' landscape' : '');
+      a.href = 'https://www.imdb.com/title/' + encodeURIComponent(m.id) + '/';
+      a.target = '_blank'; a.rel = 'noopener';
+      a.innerHTML = '<div class="thumb" style="background-image:url(\'' + esc(m.poster) + '\')" role="img" aria-label="' + esc(m.name) + '"></div><div class="name">' + esc(m.name) + '</div>';
+      track.appendChild(a);
+    });
+  }
+
+  fetch(API + '/manifest.json').then(function (r) { return r.json(); }).then(function (mf) {
+    mf.catalogs.forEach(function (cat) {
+      var sec = skeleton(cat);
+      rowsEl.appendChild(sec);
+      fetch(API + '/catalog/' + cat.type + '/' + cat.id + '.json').then(function (r) { return r.json(); })
+        .then(function (d) { fill(sec, cat, d.metas || []); })
+        .catch(function () { sec.querySelector('h2 small').textContent = 'שגיאת טעינה'; });
+    });
+  }).catch(function () { rowsEl.textContent = 'לא הצלחתי לטעון את השרת. נסו לרענן.'; });
+})();
+</script>
+</body>
+</html>
