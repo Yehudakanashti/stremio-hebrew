@@ -168,11 +168,12 @@ async function trailerStreams(type, id) {
     const live = await tmdbHe(type, id);
     heb = live && Array.isArray(live.trailers) ? live.trailers.map(t => t && t.source).filter(Boolean) : [];
   }
-  if (heb.length) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', description: 'טריילר מתורגם לעברית', ytId: heb[0] }];
+  const hints = { notWebReady: true, bingeGroup: 'trailer' };
+  if (heb.length) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', description: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
   const r = await fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } });
   const meta = r.ok ? (await r.json()).meta : null;
   const en = meta ? [...(meta.trailerStreams || []).map(t => t && t.ytId), ...(meta.trailers || []).map(t => t && t.source)].filter(Boolean)[0] : null;
-  return en ? [{ name: '🎬 טריילר', title: 'טריילר באנגלית (אין מתורגם)', description: 'טריילר באנגלית (אין מתורגם)', ytId: en }] : [];
+  return en ? [{ name: '🎬 טריילר', title: 'טריילר באנגלית (אין מתורגם)', description: 'טריילר באנגלית (אין מתורגם)', ytId: en, behaviorHints: hints }] : [];
 }
 
 function toMeta(m, row, rank, he) {
