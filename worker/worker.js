@@ -224,8 +224,8 @@ function catalog(items, type, catId, extra, he) {
 }
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
-const json = (body, status = 200) => new Response(JSON.stringify(body), {
-  status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+const json = (body, status = 200, cache = 'public, max-age=300') => new Response(JSON.stringify(body), {
+  status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': cache },
 });
 
 export default {
@@ -259,7 +259,7 @@ export default {
     const ms = p.match(/^\/stream\/(movie|series)\/(tt\d+)(?::\d+:\d+)?\.json$/);
     if (ms) {
       try {
-        return json({ streams: await trailerStreams(ms[1], ms[2]) });
+        return json({ streams: await trailerStreams(ms[1], ms[2]) }, 200, 'no-store');
       } catch (e) {
         return json({ streams: [], error: e.message }, 502);
       }
