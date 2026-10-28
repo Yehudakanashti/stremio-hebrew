@@ -71,11 +71,11 @@ function legacyPick(catId, list) {
 
 const MANIFEST = {
   id: 'org.kanashti.hebrew-catalog',
-  version: '3.1.0',
+  version: '3.2.0',
   name: 'עם עברית',
-  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם ותקציר בעברית. מתעדכן אוטומטית כל 3 שעות.',
+  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם, תקציר וטריילר מתורגם. מתעדכן אוטומטית כל 3 שעות.',
   logo: 'https://i0.wp.com/kodibeginner.com/wp-content/uploads/2020/10/ktuvit-me.jpg?w=300&ssl=1',
-  resources: ['catalog', 'meta'],
+  resources: ['catalog', 'meta', 'stream'],
   types: ['movie', 'series'],
   idPrefixes: ['tt'],
   catalogs: [
@@ -160,6 +160,21 @@ async function metaFor(type, id) {
   return meta;
 }
 
+// One trailer stream per title: the subtitled one when it exists, otherwise Cinemeta's English one.
+async function trailerStreams(type, id) {
+  const he = (await loadHe()).items[id];
+  let heb = he && Array.isArray(he.tr) ? he.tr : null;
+  if (heb === null) {
+    const live = await tmdbHe(type, id);
+    heb = live && Array.isArray(live.trailers) ? live.trailers.map(t => t && t.source).filter(Boolean) : [];
+  }
+  if (heb.length) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', description: 'טריילר מתורגם לעברית', ytId: heb[0] }];
+  const r = await fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } });
+  const meta = r.ok ? (await r.json()).meta : null;
+  const en = meta ? [...(meta.trailerStreams || []).map(t => t && t.ytId), ...(meta.trailers || []).map(t => t && t.source)].filter(Boolean)[0] : null;
+  return en ? [{ name: '🎬 טריילר', title: 'טריילר באנגלית (אין מתורגם)', description: 'טריילר באנגלית (אין מתורגם)', ytId: en }] : [];
+}
+
 function toMeta(m, row, rank, he) {
   const h = he && he[m.id];
   const name = (h && h.t) || m.name;
@@ -237,6 +252,14 @@ export default {
         return json({ meta });
       } catch (e) {
         return json({ meta: null, error: e.message }, 502);
+      }
+    }
+    const ms = p.match(/^\/stream\/(movie|series)\/(tt\d+)(?::\d+:\d+)?\.json$/);
+    if (ms) {
+      try {
+        return json({ streams: await trailerStreams(ms[1], ms[2]) });
+      } catch (e) {
+        return json({ streams: [], error: e.message }, 502);
       }
     }
     if (p === '/status') {
