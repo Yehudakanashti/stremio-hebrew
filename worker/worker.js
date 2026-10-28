@@ -2,6 +2,8 @@
 // from the index published by GitHub Pages. Free tier, always on.
 const INDEX_URL = 'https://yehudakanashti.github.io/stremio-hebrew/index.json';
 const SITE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/';
+const HE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/he.json';
+const CINEMETA = 'https://v3-cinemeta.strem.io';
 const PAGE = 100;
 const INDEX_TTL_MS = 5 * 60 * 1000;
 const EXTRA = [{ name: 'search' }, { name: 'skip' }];
@@ -66,11 +68,11 @@ function legacyPick(catId, list) {
 
 const MANIFEST = {
   id: 'org.kanashti.hebrew-catalog',
-  version: '3.0.0',
+  version: '3.1.0',
   name: 'עם עברית',
-  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות. מתעדכן אוטומטית כל 3 שעות.',
+  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם ותקציר בעברית. מתעדכן אוטומטית כל 3 שעות.',
   logo: 'https://i0.wp.com/kodibeginner.com/wp-content/uploads/2020/10/ktuvit-me.jpg?w=300&ssl=1',
-  resources: ['catalog'],
+  resources: ['catalog', 'meta'],
   types: ['movie', 'series'],
   idPrefixes: ['tt'],
   catalogs: [
@@ -93,6 +95,33 @@ async function loadIndex() {
   const d = await r.json();
   indexCache = { at: Date.now(), items: d.items || [], generatedAt: d.generatedAt || null };
   return indexCache;
+}
+
+let heCache = { at: 0, items: {} };
+
+// Hebrew titles and synopses (docs/he.json, written by enrich.js). Missing file just means no overlay.
+async function loadHe() {
+  if (Date.now() - heCache.at < INDEX_TTL_MS && heCache.at) return heCache;
+  try {
+    const r = await fetch(HE_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) heCache = { at: Date.now(), items: (await r.json()).items || {} };
+    else heCache.at = Date.now();
+  } catch { heCache.at = Date.now(); }
+  return heCache;
+}
+
+// Cinemeta's full meta (episodes, cast, art) with only the title and synopsis swapped for Hebrew when we have them.
+async function metaFor(type, id) {
+  const r = await fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } });
+  if (!r.ok) return null;
+  const meta = (await r.json()).meta;
+  if (!meta) return null;
+  const he = (await loadHe()).items[id];
+  if (he) {
+    if (he.t) meta.name = he.t;
+    if (he.o) meta.description = he.o;
+  }
+  return meta;
 }
 
 function toMeta(m, row, rank) {
@@ -157,12 +186,23 @@ export default {
         return json({ metas: [], error: e.message }, 503);
       }
     }
+    const mm = p.match(/^\/meta\/(movie|series)\/(tt\d+)\.json$/);
+    if (mm) {
+      try {
+        const meta = await metaFor(mm[1], mm[2]);
+        if (!meta) return json({ meta: null }, 404);
+        return json({ meta });
+      } catch (e) {
+        return json({ meta: null, error: e.message }, 502);
+      }
+    }
     if (p === '/status') {
       try {
         const idx = await loadIndex();
+        const he = Object.values((await loadHe()).items);
         const sizes = {};
         for (const [t, rows] of Object.entries(ROWS)) for (const r of rows) sizes[`${t}/${r.id}`] = r.pick(idx.items.filter(x => x.type === t)).length;
-        return json({ items: idx.items.length, generatedAt: idx.generatedAt, cachedAt: new Date(indexCache.at).toISOString(), catalogs: MANIFEST.catalogs.length, rows: sizes });
+        return json({ items: idx.items.length, generatedAt: idx.generatedAt, cachedAt: new Date(indexCache.at).toISOString(), catalogs: MANIFEST.catalogs.length, hebrew: { entries: he.length, overview: he.filter(x => x.o).length, title: he.filter(x => x.t).length }, rows: sizes });
       } catch (e) { return json({ error: e.message }, 503); }
     }
     return json({ error: 'not found' }, 404);
