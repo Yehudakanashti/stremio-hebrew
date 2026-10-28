@@ -175,6 +175,11 @@ function toMeta(m, row, rank, he) {
     meta.poster = `https://images.metahub.space/background/small/${m.id}/img`;
     meta.posterShape = 'landscape';
   }
+  // Some apps read the trailer from the row item, not from the full meta.
+  if (h && Array.isArray(h.tr) && h.tr.length) {
+    meta.trailers = h.tr.map(id => ({ source: id, type: 'Trailer' }));
+    meta.trailerStreams = h.tr.map(id => ({ title: 'טריילר מתורגם', ytId: id }));
+  }
   return meta;
 }
 
