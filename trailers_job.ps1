@@ -4,6 +4,8 @@
 # 3) commit + push docs/yt.json, docs/subs
 $ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
+Remove-Item Env:PYTHONPATH, Env:PYTHONHOME -ErrorAction SilentlyContinue
+$env:PYTHONIOENCODING = "utf-8"
 $log = Join-Path $PSScriptRoot "trailers_job.log"
 $lock = Join-Path $PSScriptRoot "trailers_job.lock"
 if ((Test-Path $lock) -and ((Get-Date) - (Get-Item $lock).LastWriteTime).TotalHours -lt 12) { "=== $(Get-Date -Format s) skipped, another run holds the lock" | Out-File $log -Append -Encoding utf8; exit }

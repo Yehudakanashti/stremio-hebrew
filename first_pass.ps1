@@ -2,6 +2,9 @@
 # Started detached from the Claude session on 28.10.26; trailers_job.ps1 takes over nightly afterwards.
 $ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
+# a parent process may carry another Python's env (SRE module mismatch): run py -3.10 clean
+Remove-Item Env:PYTHONPATH, Env:PYTHONHOME -ErrorAction SilentlyContinue
+$env:PYTHONIOENCODING = "utf-8"
 $log = Join-Path $PSScriptRoot "first_pass.log"
 $lock = Join-Path $PSScriptRoot "trailers_job.lock"
 try {
