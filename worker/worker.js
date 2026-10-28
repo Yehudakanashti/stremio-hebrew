@@ -141,9 +141,10 @@ async function metaFor(type, id) {
   if (desc) meta.description = desc;
   // Hebrew-subtitled trailers (Israeli distributors' uploads, via TMDB he-IL) go first; Cinemeta's English ones stay as fallback.
   const hebTr = (he && Array.isArray(he.tr) ? he.tr : (live && Array.isArray(live.trailers) ? live.trailers.map(t => t && t.source).filter(Boolean) : [])).slice(0, 3);
+  // When a subtitled trailer exists it is the only one offered: apps do not all take the first entry.
   if (hebTr.length) {
-    meta.trailers = [...hebTr.map(id => ({ source: id, type: 'Trailer' })), ...(meta.trailers || []).filter(t => !hebTr.includes(t.source))];
-    meta.trailerStreams = [...hebTr.map(id => ({ title: 'טריילר מתורגם', ytId: id })), ...(meta.trailerStreams || []).filter(t => !hebTr.includes(t.ytId))];
+    meta.trailers = hebTr.map(id => ({ source: id, type: 'Trailer' }));
+    meta.trailerStreams = hebTr.map(id => ({ title: 'טריילר מתורגם', ytId: id }));
   }
   if (live && Array.isArray(live.videos) && Array.isArray(meta.videos)) {
     const key = v => `${v.season}:${v.number ?? v.episode}`;
