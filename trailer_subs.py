@@ -52,8 +52,9 @@ def fetch_json3(tracks, langs):
 
 NOISE = re.compile(r"\[[^\]]*\]|\([^)]*\)|♪|>>|^\s*-\s+")  # [Music], (applause), ♪ lyric markers, >> speaker marks
 
-def cues_from_json3(d, max_chars=42, max_gap_ms=900):
-    # Build readable cues from YouTube's word/segment events (auto captions roll word by word).
+def cues_from_json3(d, max_chars=80, max_gap_ms=1200):
+    # Build sentence-sized cues from YouTube's word events (auto captions roll word by word), so the
+    # translation sees whole sentences: cut at . ? ! or at a pause, and only otherwise at max_chars.
     words = []
     for ev in d.get("events") or []:
         if ev.get("aAppend") or "segs" not in ev:
@@ -65,15 +66,18 @@ def cues_from_json3(d, max_chars=42, max_gap_ms=900):
                 continue
             words.append((start + (s.get("tOffsetMs") or 0), txt))
     cues, cur, cur_start, last_t = [], [], None, None
+    def flush(end):
+        if cur:
+            cues.append((cur_start, end, " ".join(cur)))
     for t, w in words:
         if cur and (len(" ".join(cur)) + len(w) + 1 > max_chars or t - last_t > max_gap_ms):
-            cues.append((cur_start, last_t + 600, " ".join(cur)))
-            cur, cur_start = [], None
+            flush(last_t + 600); cur, cur_start = [], None
         if cur_start is None:
             cur_start = t
         cur.append(w); last_t = t
-    if cur:
-        cues.append((cur_start, last_t + 1500, " ".join(cur)))
+        if re.search(r"[.?!]$", w) and len(" ".join(cur)) > 12:
+            flush(t + 1200); cur, cur_start = [], None
+    flush((last_t or 0) + 1500)
     # end never past the next start
     out = []
     for i, (s, e, txt) in enumerate(cues):

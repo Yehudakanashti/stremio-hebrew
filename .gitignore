@@ -1,3 +1,4 @@
 node_modules/
 worker/.wrangler/
 trailers_job.log
+trailers_job.lock

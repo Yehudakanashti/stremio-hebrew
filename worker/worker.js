@@ -202,7 +202,7 @@ async function trailerStreams(type, id) {
   // `title` only: newer stremio-core treats `title` as an alias of `description` and rejects a stream carrying both.
   if (heb.length) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
   const found = (await loadYt()).items[id];
-  if (found && found.yt) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: found.yt, behaviorHints: hints }];
+  if (found && found.yt) return [{ name: '🎬 טריילר', title: found.dub ? 'טריילר מדובב לעברית' : 'טריילר מתורגם לעברית', ytId: found.yt, behaviorHints: hints }];
   const sub = (await loadSubs()).items[id];
   if (sub && sub.kind && sub.yt) {
     const subtitles = [{ id: 'he', lang: 'heb', url: `${SITE_URL}subs/${id}.vtt` }];

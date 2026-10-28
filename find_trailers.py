@@ -72,11 +72,11 @@ def candidates(m, heb_title):
     return sorted(cands, key=lambda c: -c["score"])[:4]
 
 def hebrew_burned_in(yt, dur):
-    # 3 one-second clips at 35/55/75% of the video; Hebrew letters found by OCR in the lower third = verified
+    # 2-second clips at 30/45/60/75% of the video; Hebrew letters found by OCR in the lower band = verified
     tmp = tempfile.mkdtemp(prefix="trl_")
     try:
         hits = 0
-        for frac in (0.35, 0.55, 0.75):
+        for frac in (0.3, 0.45, 0.6, 0.75):
             sec = max(5, int(dur * frac))
             base = os.path.join(tmp, f"c{sec}")
             run([sys.executable, "-m", "yt_dlp", "--no-warnings", "-f", "bv*[height<=480][ext=mp4]/bv*[height<=480]/bv*",
@@ -84,7 +84,7 @@ def hebrew_burned_in(yt, dur):
             clip = next((os.path.join(tmp, f) for f in os.listdir(tmp) if f.startswith(f"c{sec}.")), None)
             if not clip:
                 continue
-            for k, off in enumerate((0.3, 1.0, 1.7)):
+            for k, off in enumerate((0.2, 0.7, 1.2, 1.7)):
                 frame = f"{base}_{k}.png"
                 run(["ffmpeg", "-loglevel", "error", "-y", "-ss", str(off), "-i", clip, "-frames:v", "1",
                      "-vf", "crop=iw:ih*0.4:0:ih*0.6,scale=1280:-1,negate,format=gray", frame], 60)
@@ -129,7 +129,7 @@ def main():
             for c in candidates(m, heb_title):
                 entry["tried"].append(c["id"])
                 if hebrew_burned_in(c["id"], c["dur"]):
-                    entry.update({"yt": c["id"], "ch": c["ch"], "title": c["title"][:80]})
+                    entry.update({"yt": c["id"], "ch": c["ch"], "title": c["title"][:80], "dub": bool(re.search(r"מדובב|דיבוב", c["title"]))})
                     found += 1
                     log("FOUND", m["id"], heb_title, "->", c["id"], c["ch"])
                     break
