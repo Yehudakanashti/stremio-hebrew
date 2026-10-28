@@ -3,6 +3,7 @@
 const INDEX_URL = 'https://yehudakanashti.github.io/stremio-hebrew/index.json';
 const SITE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/';
 const HE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/he.json';
+const SUBS_URL = 'https://yehudakanashti.github.io/stremio-hebrew/subs/index.json';
 const CINEMETA = 'https://v3-cinemeta.strem.io';
 // Public TMDB addon with the Hebrew (he-IL) config: TMDB's own Hebrew text, no key needed.
 const TMDB_HE = 'https://tmdb.elfhosted.com/%7B%22language%22%3A%22he-IL%22%7D';
@@ -160,7 +161,21 @@ async function metaFor(type, id) {
   return meta;
 }
 
-// One trailer stream per title: the subtitled one when it exists, otherwise Cinemeta's English one.
+let subsCache = { at: 0, items: {} };
+
+// docs/subs/index.json (trailer_subs.py on the PC): English trailers that got a Hebrew .vtt (kind h = YouTube's own track, m = machine).
+async function loadSubs() {
+  if (Date.now() - subsCache.at < INDEX_TTL_MS && subsCache.at) return subsCache;
+  try {
+    const r = await fetch(SUBS_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) subsCache = { at: Date.now(), items: (await r.json()).items || {} };
+    else subsCache.at = Date.now();
+  } catch { subsCache.at = Date.now(); }
+  return subsCache;
+}
+
+// One trailer stream per title, best available: subtitled distributor trailer (TMDB he-IL), then a found YouTube one,
+// then Cinemeta's English trailer with our Hebrew .vtt, then plain English.
 async function trailerStreams(type, id) {
   const he = (await loadHe()).items[id];
   let heb = he && Array.isArray(he.tr) ? he.tr : null;
@@ -171,6 +186,12 @@ async function trailerStreams(type, id) {
   const hints = { notWebReady: true, bingeGroup: 'trailer' };
   // `title` only: newer stremio-core treats `title` as an alias of `description` and rejects a stream carrying both.
   if (heb.length) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
+  const sub = (await loadSubs()).items[id];
+  if (sub && sub.kind && sub.yt) {
+    const subtitles = [{ id: 'he', lang: 'heb', url: `${SITE_URL}subs/${id}.vtt` }];
+    const title = sub.kind === 'h' ? 'טריילר עם כתוביות בעברית' : 'טריילר עם כתוביות בעברית (תרגום מכונה)';
+    return [{ name: '🎬 טריילר', title, ytId: sub.yt, subtitles, behaviorHints: hints }];
+  }
   const r = await fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } });
   const meta = r.ok ? (await r.json()).meta : null;
   const en = meta ? [...(meta.trailerStreams || []).map(t => t && t.ytId), ...(meta.trailers || []).map(t => t && t.source)].filter(Boolean)[0] : null;
