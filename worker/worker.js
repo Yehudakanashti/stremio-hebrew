@@ -4,6 +4,9 @@ const INDEX_URL = 'https://yehudakanashti.github.io/stremio-hebrew/index.json';
 const SITE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/';
 const HE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/he.json';
 const CINEMETA = 'https://v3-cinemeta.strem.io';
+// Public TMDB addon with the Hebrew (he-IL) config: TMDB's own Hebrew text, no key needed.
+const TMDB_HE = 'https://tmdb.elfhosted.com/%7B%22language%22%3A%22he-IL%22%7D';
+const HEBREW = /[֐-׿]/;
 const PAGE = 100;
 const INDEX_TTL_MS = 5 * 60 * 1000;
 const EXTRA = [{ name: 'search' }, { name: 'skip' }];
@@ -110,27 +113,55 @@ async function loadHe() {
   return heCache;
 }
 
-// Cinemeta's full meta (episodes, cast, art) with only the title and synopsis swapped for Hebrew when we have them.
+const heb = s => (typeof s === 'string' && HEBREW.test(s) ? s : null);
+
+// Live Hebrew meta from the TMDB addon: episode titles/synopses, and titles enrich.js has not reached yet.
+async function tmdbHe(type, id) {
+  try {
+    const r = await fetch(`${TMDB_HE}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 86400, cacheEverything: true }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    return (await r.json()).meta || null;
+  } catch { return null; }
+}
+
+// Cinemeta's full meta (episodes, cast, art) with the title, synopsis and episode texts swapped for Hebrew when we have them.
+// Episode ids stay Cinemeta's, so streams and subtitles keep resolving as before.
 async function metaFor(type, id) {
-  const r = await fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } });
+  const he = (await loadHe()).items[id];
+  const [r, live] = await Promise.all([
+    fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } }),
+    type === 'series' || !he ? tmdbHe(type, id) : null,
+  ]);
   if (!r.ok) return null;
   const meta = (await r.json()).meta;
   if (!meta) return null;
-  const he = (await loadHe()).items[id];
-  if (he) {
-    if (he.t) meta.name = he.t;
-    if (he.o) meta.description = he.o;
+  const name = (he && he.t) || (live && heb(live.name));
+  const desc = (he && he.o) || (live && heb(live.description));
+  if (name) meta.name = name;
+  if (desc) meta.description = desc;
+  if (live && Array.isArray(live.videos) && Array.isArray(meta.videos)) {
+    const key = v => `${v.season}:${v.number ?? v.episode}`;
+    const byEp = new Map(live.videos.map(v => [key(v), v]));
+    for (const v of meta.videos) {
+      const l = byEp.get(key(v));
+      if (!l) continue;
+      const n = heb(l.name || l.title), o = heb(l.overview || l.description);
+      if (n) { v.name = n; v.title = n; }
+      if (o) { v.overview = o; v.description = o; }
+    }
   }
   return meta;
 }
 
-function toMeta(m, row, rank) {
+function toMeta(m, row, rank, he) {
+  const h = he && he[m.id];
+  const name = (h && h.t) || m.name;
   const meta = {
-    id: m.id, type: m.type, name: row && row.numbered && rank != null ? `${rank + 1}. ${m.name}` : m.name,
+    id: m.id, type: m.type, name: row && row.numbered && rank != null ? `${rank + 1}. ${name}` : name,
     poster: m.poster, posterShape: 'poster',
     background: `https://images.metahub.space/background/medium/${m.id}/img`,
     logo: `https://images.metahub.space/logo/medium/${m.id}/img`,
-    description: m.description, releaseInfo: m.year ? String(m.year) : undefined,
+    description: (h && h.o) || m.description, releaseInfo: m.year ? String(m.year) : undefined,
     imdbRating: m.imdbRating, genres: m.genres,
   };
   if (row && row.shape === 'landscape') {
@@ -150,17 +181,17 @@ function parseExtra(seg) {
   return extra;
 }
 
-function catalog(items, type, catId, extra) {
+function catalog(items, type, catId, extra, he) {
   const all = items.filter(m => m.type === type);
   const row = (ROWS[type] || []).find(r => r.id === catId);
   let list = row ? row.pick(all) : legacyPick(catId, all);
   if (list === null) return null;
   if (extra.search) {
     const q = extra.search.toLowerCase().trim();
-    list = list.filter(m => String(m.name || '').toLowerCase().includes(q));
+    list = list.filter(m => [m.name, he && he[m.id] && he[m.id].t].some(s => String(s || '').toLowerCase().includes(q)));
   }
   const skip = Number(extra.skip) || 0;
-  return list.slice(skip, skip + PAGE).map((m, i) => toMeta(m, row, skip + i));
+  return list.slice(skip, skip + PAGE).map((m, i) => toMeta(m, row, skip + i, he));
 }
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
@@ -178,8 +209,8 @@ export default {
     const m = p.match(/^\/catalog\/(movie|series)\/(heb-[a-z0-9-]+)(?:\/(.+?))?\.json$/);
     if (m) {
       try {
-        const idx = await loadIndex();
-        const metas = catalog(idx.items, m[1], m[2], parseExtra(m[3]));
+        const [idx, he] = await Promise.all([loadIndex(), loadHe()]);
+        const metas = catalog(idx.items, m[1], m[2], parseExtra(m[3]), he.items);
         if (metas === null) return json({ error: 'unknown catalog' }, 404);
         return json({ metas });
       } catch (e) {
