@@ -7,8 +7,8 @@ Set-Location $PSScriptRoot
 $log = Join-Path $PSScriptRoot "trailers_job.log"
 "=== $(Get-Date -Format s) start" | Out-File $log -Append -Encoding utf8
 git pull --rebase -q 2>&1 | Out-File $log -Append -Encoding utf8
-python find_trailers.py --limit 400 2>&1 | Out-File $log -Append -Encoding utf8
-python trailer_subs.py --limit 400 2>&1 | Out-File $log -Append -Encoding utf8
+py -3.10 find_trailers.py --limit 400 2>&1 | Out-File $log -Append -Encoding utf8
+py -3.10 trailer_subs.py --limit 400 2>&1 | Out-File $log -Append -Encoding utf8
 git add docs/yt.json docs/subs 2>&1 | Out-File $log -Append -Encoding utf8
 git -c core.autocrlf=false commit -q -m "trailers $(Get-Date -Format yyyy-MM-ddTHH:mm)" 2>&1 | Out-File $log -Append -Encoding utf8
 git pull --rebase -q 2>&1 | Out-File $log -Append -Encoding utf8

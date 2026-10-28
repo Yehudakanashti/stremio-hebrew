@@ -50,7 +50,7 @@ def fetch_json3(tracks, langs):
                     continue
     return None
 
-NOISE = re.compile(r"\[[^\]]*\]|\([^)]*\)|♪")  # [Music], (applause), ♪ lyric markers
+NOISE = re.compile(r"\[[^\]]*\]|\([^)]*\)|♪|>>|^\s*-\s+")  # [Music], (applause), ♪ lyric markers, >> speaker marks
 
 def cues_from_json3(d, max_chars=42, max_gap_ms=900):
     # Build readable cues from YouTube's word/segment events (auto captions roll word by word).

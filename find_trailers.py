@@ -14,8 +14,16 @@ HEB = re.compile(r"[\u0590-\u05FF]")
 TRAILER = re.compile(r"טריילר|קדימון|טיזר|trailer|teaser", re.I)
 # channels seen uploading Hebrew-titled but UNsubtitled trailers: never trust by name, but still OCR them last
 LOW_PRIORITY = re.compile(r"trailer feed|^netflix$|sony pictures|ynet|walla|וואלה|mako|n12", re.I)
-TESSERACT = shutil.which("tesseract") or r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 TESSDATA = os.environ.get("TESSDATA_DIR") or os.path.join(os.path.dirname(ROOT), "tessdata")  # heb.traineddata lives here (no admin needed)
+_ocr = None
+def ocr_hebrew(path):
+    # tesserocr wheel = Tesseract without an installer (run with py -3.10, where it is installed)
+    global _ocr
+    import tesserocr
+    if _ocr is None:
+        _ocr = tesserocr.PyTessBaseAPI(path=TESSDATA, lang="heb", psm=tesserocr.PSM.SINGLE_BLOCK)
+    _ocr.SetImageFile(path)
+    return _ocr.GetUTF8Text()
 
 def log(*a):
     print(time.strftime("%H:%M:%S"), *a, flush=True)
@@ -82,8 +90,7 @@ def hebrew_burned_in(yt, dur):
                      "-vf", "crop=iw:ih*0.4:0:ih*0.6,scale=1280:-1,negate,format=gray", frame], 60)
                 if not os.path.exists(frame):
                     continue
-                r = run([TESSERACT, frame, "stdout", "-l", "heb", "--psm", "6", "--tessdata-dir", TESSDATA], 60)
-                txt = r.stdout.decode("utf-8", "replace")
+                txt = ocr_hebrew(frame)
                 if len(HEB.findall(txt)) >= 6:
                     hits += 1
                     break
