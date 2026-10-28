@@ -31,6 +31,9 @@ async function lookup(type, id) {
       const t = heb(meta.name), o = heb(meta.description);
       if (t) entry.t = t;
       if (o) entry.o = o;
+      // TMDB's he-IL videos are the Israeli distributors' subtitled trailers (YouTube ids); none = no Hebrew trailer.
+      const tr = (meta.trailers || []).filter(x => x && /^[\w-]{11}$/.test(x.source || '') && /trailer|teaser/i.test(x.type || 'Trailer')).map(x => x.source);
+      entry.tr = [...new Set(tr)].slice(0, 3);
       return entry;
     } catch {
       await sleep(1000 * (attempt + 1));
@@ -46,7 +49,7 @@ async function lookup(type, id) {
   he.items = he.items || {};
 
   const now = Date.now();
-  const stale = e => !e || (e.o ? now - e.at > 60 * DAY : now - e.at > 7 * DAY);
+  const stale = e => !e || e.tr === undefined || (e.o ? now - e.at > 60 * DAY : now - e.at > 7 * DAY);
   let todo = items.filter(m => stale(he.items[m.id]));
   const lim = process.argv.indexOf('--limit');
   if (lim > 0) todo = todo.slice(0, Number(process.argv[lim + 1]) || 20);
@@ -66,7 +69,7 @@ async function lookup(type, id) {
   he.generatedAt = new Date().toISOString();
   fs.writeFileSync(OUT, JSON.stringify(he));
   const vals = Object.values(he.items);
-  log(`done: fetched ${done - failed}, failed ${failed}; overview ${vals.filter(v => v.o).length}, title ${vals.filter(v => v.t).length} of ${vals.length}`);
+  log(`done: fetched ${done - failed}, failed ${failed}; overview ${vals.filter(v => v.o).length}, title ${vals.filter(v => v.t).length}, hebrew trailer ${vals.filter(v => v.tr && v.tr.length).length} of ${vals.length}`);
   // Mostly failures means the source is down: keep the partial file, but make the run visibly red.
   if (done && failed > done / 2) { console.error(`source unreachable: ${failed}/${done} failed`); process.exit(1); }
 })().catch(e => { console.error(e.message); process.exit(1); });

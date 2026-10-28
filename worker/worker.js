@@ -139,6 +139,12 @@ async function metaFor(type, id) {
   const desc = (he && he.o) || (live && heb(live.description));
   if (name) meta.name = name;
   if (desc) meta.description = desc;
+  // Hebrew-subtitled trailers (Israeli distributors' uploads, via TMDB he-IL) go first; Cinemeta's English ones stay as fallback.
+  const hebTr = (he && Array.isArray(he.tr) ? he.tr : (live && Array.isArray(live.trailers) ? live.trailers.map(t => t && t.source).filter(Boolean) : [])).slice(0, 3);
+  if (hebTr.length) {
+    meta.trailers = [...hebTr.map(id => ({ source: id, type: 'Trailer' })), ...(meta.trailers || []).filter(t => !hebTr.includes(t.source))];
+    meta.trailerStreams = [...hebTr.map(id => ({ title: 'טריילר מתורגם', ytId: id })), ...(meta.trailerStreams || []).filter(t => !hebTr.includes(t.ytId))];
+  }
   if (live && Array.isArray(live.videos) && Array.isArray(meta.videos)) {
     const key = v => `${v.season}:${v.number ?? v.episode}`;
     const byEp = new Map(live.videos.map(v => [key(v), v]));
