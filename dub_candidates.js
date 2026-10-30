@@ -45,7 +45,7 @@ async function main() {
   }
   for (const y of YEARS) {
     let got = 0;
-    for (let p = 0; p < 4; p++) {
+    for (let p = 0; p < (y >= 2015 ? 8 : 4); p++) {
       let d;
       try { d = await getJson(`${CINEMETA}/catalog/movie/year/genre=${y}&skip=${p * PAGE}.json`); } catch (e) { break; }
       const metas = d.metas || [];
