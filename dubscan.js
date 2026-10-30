@@ -85,6 +85,10 @@ async function stremioRelease(c) {
 async function alldebridUrl(c) {
   const base = 'https://api.alldebrid.com/v4';
   const q = `agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}`;
+  // only releases already in AllDebrid's cache: those are the ones Stremio plays instantly, and nothing gets downloaded on the account
+  const inst = await getJson(`${base}/magnet/instant?${q}&magnets[]=${c.hash}`);
+  const im = inst.data && inst.data.magnets && inst.data.magnets[0];
+  if (!im || !im.instant) throw new Error('not cached');
   const up = await getJson(`${base}/magnet/upload?${q}&magnets[]=${c.hash}`);
   const m = up.data && up.data.magnets && up.data.magnets[0];
   if (!m || !m.id) throw new Error('alldebrid upload: ' + JSON.stringify(up).slice(0, 120));
