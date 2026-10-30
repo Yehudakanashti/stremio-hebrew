@@ -133,8 +133,14 @@ async function probe(c) {
   let url;
   try { url = viaAd ? await alldebridUrl(c) : await stremioUrl(c); }
   catch (e) { return { ok: false, err: e.message.slice(0, 120) }; }
-  try { return runProbe(url); }
-  finally { if (viaAd) await alldebridRelease(c); else await stremioRelease(c); }
+  let p;
+  try { p = runProbe(url); }
+  finally {
+    // a proven dub STAYS in his AllDebrid list (so the debrid Library addon can serve it instantly); everything else is removed
+    const keep = p && p.ok && p.hebrew;
+    if (viaAd) { if (!keep) await alldebridRelease(c); } else await stremioRelease(c);
+  }
+  return p;
 }
 
 function load() {

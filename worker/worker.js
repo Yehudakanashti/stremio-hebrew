@@ -241,20 +241,23 @@ async function trailerStreams(type, id) {
     heb = live && Array.isArray(live.trailers) ? live.trailers.map(t => t && t.source).filter(Boolean) : [];
   }
   const hints = { notWebReady: true, bingeGroup: 'trailer' };
+  // a proven Hebrew-dubbed release goes first (this addon is first in his list, so it is the first stream he sees)
+  const dubbed = type === 'movie' ? (await loadDub()).items[id] : null;
+  const first = dubbed && dubbed.hash ? [dubStream(dubbed)] : [];
   // `title` only: newer stremio-core treats `title` as an alias of `description` and rejects a stream carrying both.
-  if (heb.length) return [{ name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
+  if (heb.length) return [...first, { name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
   const found = (await loadYt()).items[id];
-  if (found && found.yt) return [{ name: '🎬 טריילר', title: found.dub ? 'טריילר מדובב לעברית' : 'טריילר מתורגם לעברית', ytId: found.yt, behaviorHints: hints }];
+  if (found && found.yt) return [...first, { name: '🎬 טריילר', title: found.dub ? 'טריילר מדובב לעברית' : 'טריילר מתורגם לעברית', ytId: found.yt, behaviorHints: hints }];
   const sub = (await loadSubs()).items[id];
   if (sub && sub.kind && sub.yt) {
     const subtitles = [{ id: 'he', lang: 'heb', url: `${SITE_URL}subs/${id}.vtt` }];
     const title = sub.kind === 'h' ? 'טריילר עם כתוביות בעברית' : 'טריילר עם כתוביות בעברית (תרגום מכונה)';
-    return [{ name: '🎬 טריילר', title, ytId: sub.yt, subtitles, behaviorHints: hints }];
+    return [...first, { name: '🎬 טריילר', title, ytId: sub.yt, subtitles, behaviorHints: hints }];
   }
   const r = await fetch(`${CINEMETA}/meta/${type}/${encodeURIComponent(id)}.json`, { cf: { cacheTtl: 3600, cacheEverything: true } });
   const meta = r.ok ? (await r.json()).meta : null;
   const en = meta ? [...(meta.trailerStreams || []).map(t => t && t.ytId), ...(meta.trailers || []).map(t => t && t.source)].filter(Boolean)[0] : null;
-  return en ? [{ name: '🎬 טריילר', title: 'טריילר באנגלית (אין מתורגם)', ytId: en, behaviorHints: hints }] : [];
+  return en ? [...first, { name: '🎬 טריילר', title: 'טריילר באנגלית (אין מתורגם)', ytId: en, behaviorHints: hints }] : first;
 }
 
 function toMeta(m, row, rank, he, dub) {
