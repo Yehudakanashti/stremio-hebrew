@@ -14,6 +14,13 @@ New-Item -ItemType File -Path $lock -Force | Out-Null
 try {
   "=== $(Get-Date -Format s) start total=$Total chunk=$Chunk" | Out-File $log -Append -Encoding utf8
   git pull --rebase -q 2>&1 | Out-File $log -Append -Encoding utf8
+  # the candidate universe (Cinemeta genres + years) is rebuilt weekly
+  $cands = Join-Path $PSScriptRoot "data\dubcands.json"
+  if (-not (Test-Path $cands) -or ((Get-Date) - (Get-Item $cands).LastWriteTime).TotalDays -gt 7) {
+    node dub_candidates.js 2>&1 | Select-Object -Last 1 | Out-File $log -Append -Encoding utf8
+    git add data/dubcands.json 2>&1 | Out-Null
+    git -c core.autocrlf=false commit -q -m "dub candidates $(Get-Date -Format yyyy-MM-dd)" 2>&1 | Out-Null
+  }
   $n = 0
   while ($n -lt $Total) {
     node dubscan.js --limit $Chunk 2>&1 | Select-String -Pattern "FOUND|DROP|done:|movies |fail |delete " | ForEach-Object { $_.Line } | Out-File $log -Append -Encoding utf8

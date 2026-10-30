@@ -206,15 +206,23 @@ const DUB_MANIFEST = {
   behaviorHints: { configurable: false, configurationRequired: false },
 };
 const TRACKERS = ['udp://tracker.opentrackr.org:1337/announce', 'udp://open.stealth.si:80/announce', 'udp://tracker.torrent.eu.org:451/announce', 'udp://exodus.desync.com:6969/announce', 'udp://open.demonii.com:1337/announce'];
-function dubStream(d) {
-  const base = String(d.rel || 'dubbed').replace(/\.(mkv|mp4|avi)$/i, '').replace(/[\s_]+/g, '.');
-  return {
-    name: '🗣️ דיבוב עברית', title: `דיבוב עברית מלא (לא כתוביות)\n${d.rel || ''}`,
-    infoHash: d.hash, fileIdx: Number.isInteger(d.fileIdx) ? d.fileIdx : 0,
-    sources: [...TRACKERS.map(t => 'tracker:' + t), 'dht:' + d.hash],
-    // the filename hint carries "Hebrew Dubbed" so stream wrappers tag the audio language
-    behaviorHints: { bingeGroup: 'hebdub', filename: `${base}.Hebrew.Dubbed.mkv` },
-  };
+// Up to two proven releases per film: a Hebrew-default file first, then a multi-audio one (Hebrew chosen in the player).
+function dubStreams(item) {
+  const list = Array.isArray(item.dubs) && item.dubs.length ? item.dubs : [{ hash: item.hash, fileIdx: item.fileIdx, rel: item.rel, hebOnly: item.hebOnly !== false, size: item.size }];
+  return list.filter(d => d && d.hash).slice(0, 2).map(d => {
+    const base = String(d.rel || 'dubbed').replace(/\.(mkv|mp4|avi)$/i, '').replace(/[\s_]+/g, '.');
+    const gb = d.size ? ` · ${(d.size / 1024).toFixed(1)} GB` : '';
+    const title = d.hebOnly
+      ? `דיבוב עברית מלא, העברית מתנגנת אוטומטית${gb}\n${d.rel || ''}`
+      : `דיבוב עברית מלא בקובץ רב-לשוני: בנגן בחר שמע ← עברית${gb}\n${d.rel || ''}`;
+    return {
+      name: d.hebOnly ? '🗣️ דיבוב עברית' : '🗣️ דיבוב עברית (רב-לשוני)', title,
+      infoHash: d.hash, fileIdx: Number.isInteger(d.fileIdx) ? d.fileIdx : 0,
+      sources: [...TRACKERS.map(t => 'tracker:' + t), 'dht:' + d.hash],
+      // the filename hint carries "Hebrew Dubbed" so stream wrappers tag the audio language
+      behaviorHints: { bingeGroup: 'hebdub', filename: `${base}.Hebrew.Dubbed.mkv` },
+    };
+  });
 }
 const withDubTag = (desc, dubbed) => (dubbed ? `${DUB_TAG}\n\n${desc || ''}`.trim() : desc);
 
@@ -243,7 +251,7 @@ async function trailerStreams(type, id) {
   const hints = { notWebReady: true, bingeGroup: 'trailer' };
   // a proven Hebrew-dubbed release goes first (this addon is first in his list, so it is the first stream he sees)
   const dubbed = type === 'movie' ? (await loadDub()).items[id] : null;
-  const first = dubbed && dubbed.hash ? [dubStream(dubbed)] : [];
+  const first = dubbed ? dubStreams(dubbed) : [];
   // `title` only: newer stremio-core treats `title` as an alias of `description` and rejects a stream carrying both.
   if (heb.length) return [...first, { name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
   const found = (await loadYt()).items[id];
@@ -324,7 +332,7 @@ export default {
     if (md) {
       try {
         const d = (await loadDub()).items[md[1]];
-        return json({ streams: d && d.hash ? [dubStream(d)] : [] });
+        return json({ streams: d ? dubStreams(d) : [] });
       } catch (e) {
         return json({ streams: [], error: e.message }, 502);
       }
