@@ -1,61 +1,25 @@
 name: hebrew dubs
 
-# Proves Hebrew AUDIO tracks (real dubs) with ffprobe over AllDebrid links and publishes docs/dub.json
-# for the "🗣️ מדובב לעברית" row. Needs the ALLDEBRID_KEY secret; without it the job only lists candidates.
+# Diagnostics only. AllDebrid answers AUTH_BLOCKED to every API call from GitHub's datacenter IPs, so the real scan
+# (the ffprobe proof over AllDebrid links) runs on the owner's PC: dubs_job.ps1. This job lists candidates without probing.
 on:
-  schedule:
-    - cron: "30 */3 * * *"
   workflow_dispatch:
     inputs:
       limit:
-        description: titles to check this run
-        default: "150"
-      only:
-        description: one IMDb id (optional)
-        default: ""
+        description: titles to list
+        default: "20"
 
 permissions:
-  contents: write
-
-concurrency:
-  group: dubscan
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  dubs:
+  dry-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: ffprobe
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null && ffprobe -version | head -1
-      - name: can CI reach torrentio
-        run: |
-          code=$(curl -s -o /tmp/t.json -w '%{http_code}' -m 40 -A 'Mozilla/5.0 (X11; Linux x86_64) Chrome/130' "https://torrentio.strem.fun/stream/movie/tt29356163.json")
-          echo "torrentio http=$code streams=$(grep -o infoHash /tmp/t.json | wc -l)"
-          test "$code" = "200"
-      - name: scan in chunks (every chunk is pushed, so a timeout loses at most one chunk)
-        env:
-          ALLDEBRID_KEY: ${{ secrets.ALLDEBRID_KEY }}
-        run: |
-          git config user.name "scan-bot"
-          git config user.email "scan-bot@users.noreply.github.com"
-          if [ -z "$ALLDEBRID_KEY" ]; then echo "ALLDEBRID_KEY secret missing: dry run"; node dubscan.js --limit 20 --no-probe; exit 0; fi
-          ONLY="${{ github.event.inputs.only }}"
-          if [ -n "$ONLY" ]; then node dubscan.js --only "$ONLY" --force; exit 0; fi
-          LIMIT="${{ github.event.inputs.limit || '150' }}"; CHUNK=40; n=0
-          while [ "$n" -lt "$LIMIT" ]; do
-            node dubscan.js --limit $CHUNK
-            git add docs/dub.json
-            if ! git diff --cached --quiet; then git commit -q -m "dubs $(date -u +%Y-%m-%dT%H:%MZ)" && git pull --rebase -q && git push -q; fi
-            n=$((n + CHUNK))
-          done
-      - name: commit results
-        run: |
-          git config user.name "scan-bot"
-          git config user.email "scan-bot@users.noreply.github.com"
-          git add docs/dub.json
-          if git diff --cached --quiet; then echo "no changes"; else git commit -m "dubs $(date -u +%Y-%m-%dT%H:%MZ)" && git pull --rebase && git push; fi
+      - name: list candidates (no probing)
+        run: node dubscan.js --limit "${{ github.event.inputs.limit || '20' }}" --no-probe

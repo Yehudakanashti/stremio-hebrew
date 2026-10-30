@@ -16,7 +16,10 @@ const CACHE = path.join(ROOT, 'data', 'cache.json');
 const OUT = path.join(ROOT, 'docs', 'dub.json');
 const TORRENTIO = 'https://torrentio.strem.fun/stream/movie/';
 const STREMIO_SERVER = process.env.STREMIO_SERVER || 'http://127.0.0.1:11470';
-const ALLDEBRID_KEY = process.env.ALLDEBRID_KEY || '';
+// AllDebrid refuses API calls from datacenter IPs (AUTH_BLOCKED on GitHub Actions), so the proof runs on the PC:
+// the key lives in a file outside the repo (never committed), pasted there by the owner.
+const KEY_FILE = process.env.ALLDEBRID_KEY_FILE || path.join(path.dirname(ROOT), 'alldebrid.key');
+const ALLDEBRID_KEY = process.env.ALLDEBRID_KEY || (fs.existsSync(KEY_FILE) ? fs.readFileSync(KEY_FILE, 'utf8').trim() : '');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36';
 const DAY = 864e5;
 const IL = '\u{1F1EE}\u{1F1F1}';

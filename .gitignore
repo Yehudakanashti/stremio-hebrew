@@ -3,3 +3,6 @@ worker/.wrangler/
 trailers_job.log
 trailers_job.lock
 first_pass.log
+alldebrid.key
+dubs_job.log
+dubs_job.lock
