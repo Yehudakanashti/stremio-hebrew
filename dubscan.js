@@ -72,9 +72,11 @@ function parseStream(s) {
   const subNote = /sub(?:s|titles?)?\s*\([^)]*heb/i.test(name);
   // releases that are "multi" for another market (Russian/French/Latin/Polish/Italian dubs) rarely carry Hebrew
   const otherMarket = /[Ѐ-ӿ]|\b(?:vff?|vf2|vfq|truefrench|french|latino|dublado|pldub|lektor|ita-eng|ita\b|hindi|tamil|telugu)\b/i.test(name);
-  if (!explicit && !multi && !(flagged && !subNote)) return null;
-  const score = (explicit ? 100 : 0) + (multi && flagged ? 50 : 0) + (fullAudioGroup ? 30 : 0) + (multi ? 20 : 0) + (flagged && !subNote ? 10 : 0) - (otherMarket && !flagged ? 40 : 0) + Math.min(seeds, 500) / 100;
-  return { hash: String(s.infoHash || '').toLowerCase(), fileIdx: Number.isInteger(s.fileIdx) ? s.fileIdx : 0, name, seeds, size, explicit, multi, score };
+  if (!explicit && !multi && !fullAudioGroup && !(flagged && !subNote)) return null;
+  const score = (explicit ? 100 : 0) + (multi && flagged ? 50 : 0) + (fullAudioGroup ? 60 : 0) + (multi ? 20 : 0) + (flagged && !subNote ? 10 : 0) - (otherMarket && !flagged ? 40 : 0) + Math.min(seeds, 500) / 100;
+  // strong = worth a probe for ANY film; weak candidates are probed only for kids films and films known to have a Hebrew dub
+  const strong = explicit || fullAudioGroup || (multi && flagged && !subNote && !otherMarket);
+  return { hash: String(s.infoHash || '').toLowerCase(), fileIdx: Number.isInteger(s.fileIdx) ? s.fileIdx : 0, name, seeds, size, explicit, multi, strong, score };
 }
 
 // ---------- keyword releases (Knaben + The Pirate Bay) mapped to IMDb ----------
@@ -265,20 +267,25 @@ async function metaFor(tt) {
 }
 
 async function checkTitle(m, res, kwByTitle, priority) {
-  const entry = { at: Date.now(), tried: [], n: 0, v: RULES };
+  const prev = res.checked[m.id];
+  // a re-check caused by new source releases skips what was already probed under these rules
+  const prevTried = new Set(prev && prev.v === RULES && !res.items[m.id] ? prev.tried || [] : []);
+  const entry = { at: Date.now(), tried: [...prevTried], n: 0, v: RULES };
   const proven = [];
-  const maxProbes = priority ? MAX_PROBES_PRIORITY : MAX_PROBES_PER_TITLE;
+  const maxProbes = (priority ? MAX_PROBES_PRIORITY : MAX_PROBES_PER_TITLE) + prevTried.size;
+  const deep = priority || isKids(m);
   try {
     let streams = [];
     try { streams = (await getJson(`${TORRENTIO}${m.id}.json`)).streams || []; } catch (e) { entry.err = 'torrentio ' + e.message.slice(0, 40); }
     entry.n = streams.length;
     const cands = streams.map(parseStream).filter(Boolean).filter(c => c.hash);
-    for (const k of kwByTitle.get(m.id) || []) if (!cands.some(c => c.hash === k.hash)) cands.push({ hash: k.hash, fileIdx: 0, name: k.t, seeds: k.seeds, size: k.size, explicit: true, multi: false, kw: true, score: 100 + Math.min(k.seeds, 500) / 100 });
+    for (const k of kwByTitle.get(m.id) || []) if (!cands.some(c => c.hash === k.hash)) cands.push({ hash: k.hash, fileIdx: 0, name: k.t, seeds: k.seeds, size: k.size, explicit: true, multi: false, strong: true, kw: true, score: 100 + Math.min(k.seeds, 500) / 100 });
     cands.sort((a, b) => b.score - a.score);
-    const seen = new Set();
+    const seen = new Set(prevTried);
     for (const c of cands) {
       if (seen.has(c.hash)) continue;
       seen.add(c.hash);
+      if (!c.strong && !deep) continue;
       if (entry.tried.length >= maxProbes) break;
       entry.tried.push(c.hash);
       if (NO_PROBE) { log(`  cand ${m.id} ${m.name}: ${c.name.slice(0, 70)} explicit=${c.explicit} multi=${c.multi} seeds=${c.seeds}`); continue; }
@@ -374,7 +381,8 @@ async function main() {
   } catch (e) { log(`no sources file (${e.message.slice(0, 40)})`); }
   const movies = Object.values(universe).filter(m => /^tt\d+$/.test(m.id) && m.name);
   const now = Date.now();
-  let todo = movies.filter(m => (!ONLY || m.id === ONLY) && needsCheck(m, res, now));
+  const hasNewSource = m => !res.items[m.id] && (kwByTitle.get(m.id) || []).some(k => !((res.checked[m.id] || {}).tried || []).includes(k.hash));
+  let todo = movies.filter(m => (!ONLY || m.id === ONLY) && (needsCheck(m, res, now) || hasNewSource(m)));
   // films with a named release first, then known-dubbed titles, then kids films, then the newest, then the most popular
   const w = m => (kwByTitle.has(m.id) ? 4 : 0) + (priority.has(m.id) ? 2 : 0) + (isKids(m) ? 1 : 0);
   todo.sort((a, b) => (w(b) - w(a)) || (yearOf(b) - yearOf(a)) || ((a.popRank ?? 99999) - (b.popRank ?? 99999)));
