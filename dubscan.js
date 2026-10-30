@@ -120,7 +120,10 @@ async function mapToImdb(title, up, res) {
     if (year && Math.abs(Number(m.year) - year) > 1) continue;
     if (!year && up && Number(m.year) > up) continue;
     ids.push(id);
-    if (!res.universe[id]) res.universe[id] = { id, type: 'movie', name: m.name, poster: m.poster, description: m.description, year: m.year, released: m.released, imdbRating: m.imdbRating, genres: m.genre || m.genres || [], popRank: 99999, tags: ['kw'] };
+    if (!res.universe[id]) {
+      const y = m.year || (String(m.releaseInfo || '').match(/\d{4}/) || [])[0];
+      res.universe[id] = { id, type: 'movie', name: m.name, poster: m.poster, description: m.description, year: y, released: m.released || (y ? `${y}-01-01T00:00:00.000Z` : undefined), imdbRating: m.imdbRating, genres: m.genre || m.genres || [], popRank: 99999, tags: ['kw'] };
+    }
   }
   return ids;
 }
@@ -177,7 +180,16 @@ async function alldebridUrl(c) {
       const files = [];
       const walk = (arr, prefix) => (arr || []).forEach(f => Array.isArray(f.e) ? walk(f.e, prefix + f.n + '/') : files.push({ n: prefix + (f.n || f.filename || ''), l: f.l || f.link, s: f.s || f.size || 0 }));
       walk(mg.files || mg.links, '');
-      const video = files.filter(f => f.l && /\.(mkv|mp4|avi|m4v|ts|webm)$/i.test(f.n)).sort((a, b) => b.s - a.s)[0];
+      const videos = files.filter(f => f.l && /\.(mkv|mp4|avi|m4v|ts|webm)$/i.test(f.n) && f.s > 100 * 1048576).sort((a, b) => b.s - a.s);
+      let video = videos[0];
+      if (videos.length > 1) {
+        // a pack (several films in one torrent): only the file that carries this film's name may stand for it
+        const toks = norm(c.film || '').split(' ').filter(t => t.length > 1);
+        const match = videos.filter(f => { const n = norm(f.n); return toks.length && toks.filter(t => n.includes(t)).length >= Math.ceil(toks.length * 0.7); });
+        if (match.length !== 1) throw new Error(`pack of ${videos.length} videos, ${match.length} match the title`);
+        video = match[0];
+        c.packFile = video.n;
+      }
       if (!video) throw new Error('no video file in ' + files.length + ' files');
       c.size = c.size || Math.round(video.s / 1048576);
       const un = await getJson(`${AD}/v4/link/unlock?${q}&link=${encodeURIComponent(video.l)}`);
@@ -213,9 +225,14 @@ async function probe(c) {
 }
 
 // ---------- state ----------
+const PACK = /\bpart\s*\d|collection|\bpack\b|burntodisc|anthology|complete/i;
 function load() {
-  try { const d = JSON.parse(fs.readFileSync(OUT, 'utf8')); return { items: d.items || {}, checked: d.checked || {}, kw: d.kw || {} }; }
-  catch { return { items: {}, checked: {}, kw: {} }; }
+  let res;
+  try { const d = JSON.parse(fs.readFileSync(OUT, 'utf8')); res = { items: d.items || {}, checked: d.checked || {}, kw: d.kw || {} }; }
+  catch { res = { items: {}, checked: {}, kw: {} }; }
+  // a film proven through a multi-film pack before pack handling existed gets re-checked
+  for (const [tt, v] of Object.entries(res.items)) if (PACK.test(v.rel || '') && !(v.dubs || []).some(d => d.file)) { delete res.items[tt]; delete res.checked[tt]; }
+  return res;
 }
 function save(res) {
   fs.writeFileSync(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), items: res.items, checked: res.checked, kw: res.kw }));
@@ -252,13 +269,14 @@ async function checkTitle(m, res, kwByTitle) {
       if (entry.tried.length >= MAX_PROBES_PER_TITLE) break;
       entry.tried.push(c.hash);
       if (NO_PROBE) { log(`  cand ${m.id} ${m.name}: ${c.name.slice(0, 70)} explicit=${c.explicit} multi=${c.multi} seeds=${c.seeds}`); continue; }
+      c.film = m.name;
       const p = await probe(c);
       if (!p.ok) { log(`  probe ${m.id} ${c.name.slice(0, 50)}: ${p.err}`); continue; }
       log(`  probe ${m.id} ${c.name.slice(0, 50)}: audio [${p.langs.join(',')}] ${Math.round(p.seconds / 60)}min`);
       // a keyword release was matched by name only: its duration must fit this film's runtime
       if (p.hebrew && c.kw && !durationFits(p.seconds, await runtimeOf(m.id))) { log(`  mismatch ${m.id} ${m.name}: file ${Math.round(p.seconds / 60)}min vs runtime ${runtimes.get(m.id)}min`); continue; }
       if (p.hebrew) {
-        proven.push({ hash: c.hash, fileIdx: c.fileIdx, rel: c.name.slice(0, 120), langs: p.langs, hebOnly: p.hebOnly, size: c.size || 0 });
+        proven.push({ hash: c.hash, fileIdx: c.fileIdx, rel: c.name.slice(0, 120), langs: p.langs, hebOnly: p.hebOnly, size: c.size || 0, ...(c.packFile ? { file: c.packFile.slice(0, 120) } : {}) });
         // one Hebrew-default release is enough; keep probing briefly for a second (multi) option only if the first is huge
         if (p.hebOnly && proven.length >= 1) break;
         if (proven.length >= 2) break;
