@@ -195,6 +195,27 @@ async function loadDub() {
 }
 
 const DUB_TAG = '🗣️ דיבוב עברית מלא (לא כתוביות)';
+
+// Sub-addon for the dubbed releases themselves (torrent streams). Meant to be wrapped by AIOStreams, which resolves
+// torrents through his AllDebrid; our main manifest stays trailers + catalogs only.
+const DUB_MANIFEST = {
+  id: 'org.kanashti.hebrew-dub', version: '1.0.0', name: 'דיבוב עברית',
+  description: 'סרטים בדיבוב עברית מלא: רק גרסאות שרצועת השמע בעברית אומתה בקובץ עצמו.',
+  logo: 'https://i0.wp.com/kodibeginner.com/wp-content/uploads/2020/10/ktuvit-me.jpg?w=300&ssl=1',
+  resources: ['stream'], types: ['movie'], idPrefixes: ['tt'], catalogs: [],
+  behaviorHints: { configurable: false, configurationRequired: false },
+};
+const TRACKERS = ['udp://tracker.opentrackr.org:1337/announce', 'udp://open.stealth.si:80/announce', 'udp://tracker.torrent.eu.org:451/announce', 'udp://exodus.desync.com:6969/announce', 'udp://open.demonii.com:1337/announce'];
+function dubStream(d) {
+  const base = String(d.rel || 'dubbed').replace(/\.(mkv|mp4|avi)$/i, '').replace(/[\s_]+/g, '.');
+  return {
+    name: '🗣️ דיבוב עברית', title: `דיבוב עברית מלא (לא כתוביות)\n${d.rel || ''}`,
+    infoHash: d.hash, fileIdx: Number.isInteger(d.fileIdx) ? d.fileIdx : 0,
+    sources: [...TRACKERS.map(t => 'tracker:' + t), 'dht:' + d.hash],
+    // the filename hint carries "Hebrew Dubbed" so stream wrappers tag the audio language
+    behaviorHints: { bingeGroup: 'hebdub', filename: `${base}.Hebrew.Dubbed.mkv` },
+  };
+}
 const withDubTag = (desc, dubbed) => (dubbed ? `${DUB_TAG}\n\n${desc || ''}`.trim() : desc);
 
 let subsCache = { at: 0, items: {} };
@@ -295,6 +316,16 @@ export default {
     const p = decodeURIComponent(url.pathname);
     if (p === '/' || p === '') return Response.redirect(SITE_URL, 302);
     if (p === '/manifest.json') return json(MANIFEST);
+    if (p === '/dub/manifest.json') return json(DUB_MANIFEST);
+    const md = p.match(/^\/dub\/stream\/movie\/(tt\d+)\.json$/);
+    if (md) {
+      try {
+        const d = (await loadDub()).items[md[1]];
+        return json({ streams: d && d.hash ? [dubStream(d)] : [] });
+      } catch (e) {
+        return json({ streams: [], error: e.message }, 502);
+      }
+    }
     const m = p.match(/^\/catalog\/(movie|series)\/(heb-[a-z0-9-]+)(?:\/(.+?))?\.json$/);
     if (m) {
       try {
