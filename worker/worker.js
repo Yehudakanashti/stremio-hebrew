@@ -5,6 +5,7 @@ const SITE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/';
 const HE_URL = 'https://yehudakanashti.github.io/stremio-hebrew/he.json';
 const SUBS_URL = 'https://yehudakanashti.github.io/stremio-hebrew/subs/index.json';
 const YT_URL = 'https://yehudakanashti.github.io/stremio-hebrew/yt.json';
+const DUB_URL = 'https://yehudakanashti.github.io/stremio-hebrew/dub.json';
 const CINEMETA = 'https://v3-cinemeta.strem.io';
 // Public TMDB addon with the Hebrew (he-IL) config: TMDB's own Hebrew text, no key needed.
 const TMDB_HE = 'https://tmdb.elfhosted.com/%7B%22language%22%3A%22he-IL%22%7D';
@@ -40,6 +41,8 @@ const SERIES = [
 ];
 
 const MOVIES = [
+  // Hebrew-DUBBED films (audio proven by dubscan.js, not subtitles). Items come from docs/dub.json, not the subs index.
+  { id: 'heb-m-dubbed', name: '🗣️ מדובב לעברית', dub: true, pick: (l, ctx) => Object.values((ctx && ctx.dub) || {}).sort((a, b) => byReleased(a, b) || byPop(a, b)) },
   { id: 'heb-cinema-new', name: '🎞️ קולנוע: חדש בעברית', shape: 'landscape', pick: l => { const cut = Date.now() - 180 * 864e5; return l.filter(m => m.released && Date.parse(m.released) >= cut).sort((a, b) => ((b.hebrewSince || 0) - (a.hebrewSince || 0)) || byReleased(a, b)); } },
   { id: 'heb-m-new', name: '🔥 סרטים חדשים בעברית', pick: l => l.filter(isRecent).sort(byReleased) },
   { id: 'heb-m-top10', name: '🔟 טופ 10 סרטים בעברית', numbered: true, pick: l => l.slice().sort(byPop).slice(0, 10) },
@@ -73,17 +76,18 @@ function legacyPick(catId, list) {
 
 const MANIFEST = {
   id: 'org.kanashti.hebrew-catalog',
-  version: '3.2.0',
+  version: '3.3.0',
   name: 'עם עברית',
-  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם, תקציר וטריילר מתורגם. מתעדכן אוטומטית כל 3 שעות.',
+  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: שורת סרטים מדובבים לעברית, כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם, תקציר וטריילר מתורגם. מתעדכן אוטומטית כל 3 שעות.',
   logo: 'https://i0.wp.com/kodibeginner.com/wp-content/uploads/2020/10/ktuvit-me.jpg?w=300&ssl=1',
   resources: ['catalog', 'meta', 'stream'],
   types: ['movie', 'series'],
   idPrefixes: ['tt'],
+  // Home order: dubbed row first (his nephews), cinema row, then the series rows, then the rest of the movie rows.
   catalogs: [
-    ...MOVIES.slice(0, 1).map(r => ({ type: 'movie', id: r.id, name: r.name, extra: EXTRA })),
+    ...MOVIES.slice(0, 2).map(r => ({ type: 'movie', id: r.id, name: r.name, extra: EXTRA })),
     ...SERIES.map(r => ({ type: 'series', id: r.id, name: r.name, extra: EXTRA })),
-    ...MOVIES.slice(1).map(r => ({ type: 'movie', id: r.id, name: r.name, extra: EXTRA })),
+    ...MOVIES.slice(2).map(r => ({ type: 'movie', id: r.id, name: r.name, extra: EXTRA })),
   ],
   behaviorHints: { configurable: false, configurationRequired: false },
 };
@@ -141,6 +145,7 @@ async function metaFor(type, id) {
   const desc = (he && he.o) || (live && heb(live.description));
   if (name) meta.name = name;
   if (desc) meta.description = desc;
+  if (type === 'movie' && (await loadDub()).items[id]) meta.description = withDubTag(meta.description, true);
   // Hebrew-subtitled trailers (Israeli distributors' uploads, via TMDB he-IL, or found on YouTube) replace Cinemeta's English ones.
   let hebTr = (he && Array.isArray(he.tr) ? he.tr : (live && Array.isArray(live.trailers) ? live.trailers.map(t => t && t.source).filter(Boolean) : [])).slice(0, 3);
   if (!hebTr.length) { const f = (await loadYt()).items[id]; if (f && f.yt) hebTr = [f.yt]; }
@@ -175,6 +180,22 @@ async function loadYt() {
   } catch { ytCache.at = Date.now(); }
   return ytCache;
 }
+
+let dubCache = { at: 0, items: {} };
+
+// docs/dub.json (dubscan.js): films with a Hebrew AUDIO track in a playable release, each stored with its catalog meta.
+async function loadDub() {
+  if (Date.now() - dubCache.at < INDEX_TTL_MS && dubCache.at) return dubCache;
+  try {
+    const r = await fetch(DUB_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) dubCache = { at: Date.now(), items: (await r.json()).items || {} };
+    else dubCache.at = Date.now();
+  } catch { dubCache.at = Date.now(); }
+  return dubCache;
+}
+
+const DUB_TAG = '🗣️ קיים דיבוב לעברית';
+const withDubTag = (desc, dubbed) => (dubbed ? `${DUB_TAG}\n\n${desc || ''}`.trim() : desc);
 
 let subsCache = { at: 0, items: {} };
 
@@ -215,7 +236,7 @@ async function trailerStreams(type, id) {
   return en ? [{ name: '🎬 טריילר', title: 'טריילר באנגלית (אין מתורגם)', ytId: en, behaviorHints: hints }] : [];
 }
 
-function toMeta(m, row, rank, he) {
+function toMeta(m, row, rank, he, dub) {
   const h = he && he[m.id];
   const name = (h && h.t) || m.name;
   const meta = {
@@ -223,7 +244,8 @@ function toMeta(m, row, rank, he) {
     poster: m.poster, posterShape: 'poster',
     background: `https://images.metahub.space/background/medium/${m.id}/img`,
     logo: `https://images.metahub.space/logo/medium/${m.id}/img`,
-    description: (h && h.o) || m.description, releaseInfo: m.year ? String(m.year) : undefined,
+    description: withDubTag((h && h.o) || m.description, m.type === 'movie' && dub && dub[m.id]),
+    releaseInfo: m.year ? String(m.year) : undefined,
     imdbRating: m.imdbRating, genres: m.genres,
   };
   if (row && row.shape === 'landscape') {
@@ -248,17 +270,17 @@ function parseExtra(seg) {
   return extra;
 }
 
-function catalog(items, type, catId, extra, he) {
+function catalog(items, type, catId, extra, he, dub) {
   const all = items.filter(m => m.type === type);
   const row = (ROWS[type] || []).find(r => r.id === catId);
-  let list = row ? row.pick(all) : legacyPick(catId, all);
+  let list = row ? row.pick(all, { dub }) : legacyPick(catId, all);
   if (list === null) return null;
   if (extra.search) {
     const q = extra.search.toLowerCase().trim();
     list = list.filter(m => [m.name, he && he[m.id] && he[m.id].t].some(s => String(s || '').toLowerCase().includes(q)));
   }
   const skip = Number(extra.skip) || 0;
-  return list.slice(skip, skip + PAGE).map((m, i) => toMeta(m, row, skip + i, he));
+  return list.slice(skip, skip + PAGE).map((m, i) => toMeta(m, row, skip + i, he, dub));
 }
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
@@ -276,8 +298,8 @@ export default {
     const m = p.match(/^\/catalog\/(movie|series)\/(heb-[a-z0-9-]+)(?:\/(.+?))?\.json$/);
     if (m) {
       try {
-        const [idx, he] = await Promise.all([loadIndex(), loadHe()]);
-        const metas = catalog(idx.items, m[1], m[2], parseExtra(m[3]), he.items);
+        const [idx, he, dub] = await Promise.all([loadIndex(), loadHe(), m[1] === 'movie' ? loadDub() : { items: {} }]);
+        const metas = catalog(idx.items, m[1], m[2], parseExtra(m[3]), he.items, dub.items);
         if (metas === null) return json({ error: 'unknown catalog' }, 404);
         return json({ metas });
       } catch (e) {
@@ -306,9 +328,10 @@ export default {
       try {
         const idx = await loadIndex();
         const he = Object.values((await loadHe()).items);
+        const dub = (await loadDub()).items;
         const sizes = {};
-        for (const [t, rows] of Object.entries(ROWS)) for (const r of rows) sizes[`${t}/${r.id}`] = r.pick(idx.items.filter(x => x.type === t)).length;
-        return json({ items: idx.items.length, generatedAt: idx.generatedAt, cachedAt: new Date(indexCache.at).toISOString(), catalogs: MANIFEST.catalogs.length, hebrew: { entries: he.length, overview: he.filter(x => x.o).length, title: he.filter(x => x.t).length }, rows: sizes });
+        for (const [t, rows] of Object.entries(ROWS)) for (const r of rows) sizes[`${t}/${r.id}`] = r.pick(idx.items.filter(x => x.type === t), { dub }).length;
+        return json({ items: idx.items.length, generatedAt: idx.generatedAt, cachedAt: new Date(indexCache.at).toISOString(), catalogs: MANIFEST.catalogs.length, hebrew: { entries: he.length, overview: he.filter(x => x.o).length, title: he.filter(x => x.t).length }, dubbed: Object.keys(dub).length, rows: sizes });
       } catch (e) { return json({ error: e.message }, 503); }
     }
     return json({ error: 'not found' }, 404);
