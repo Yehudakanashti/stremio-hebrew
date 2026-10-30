@@ -85,31 +85,35 @@ async function stremioRelease(c) {
 async function alldebridUrl(c) {
   const base = 'https://api.alldebrid.com/v4';
   const q = `agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}`;
-  // only releases already in AllDebrid's cache: those are the ones Stremio plays instantly, and nothing gets downloaded on the account
-  const inst = await getJson(`${base}/magnet/instant?${q}&magnets[]=${c.hash}`);
-  const im = inst.data && inst.data.magnets && inst.data.magnets[0];
-  if (!im || !im.instant) throw new Error('not cached');
+  const adError = (r, what) => new Error(`alldebrid ${what}: ${(r && r.error && (r.error.code || r.error.message)) || JSON.stringify(r).slice(0, 100)}`);
+  // upload tells whether the release is already in AllDebrid's cache (`ready`): those are the ones Stremio plays instantly.
+  // A release that is not cached is deleted again right away, so nothing starts downloading on the account.
   const up = await getJson(`${base}/magnet/upload?${q}&magnets[]=${c.hash}`);
+  if (up.status !== 'success') throw adError(up, 'upload');
   const m = up.data && up.data.magnets && up.data.magnets[0];
-  if (!m || !m.id) throw new Error('alldebrid upload: ' + JSON.stringify(up).slice(0, 120));
+  if (!m || m.error) throw adError(m, 'magnet');
   c.adId = m.id;
+  if (!m.ready) { await alldebridRelease(c); throw new Error('not cached'); }
   for (let i = 0; i < 6; i++) {
     const st = await getJson(`${base}/magnet/status?${q}&id=${m.id}`);
+    if (st.status !== 'success') throw adError(st, 'status');
     const mg = st.data && st.data.magnets;
-    if (mg && mg.status === 'Ready') {
+    const ready = mg && (mg.statusCode === 4 || /^Ready$/i.test(mg.status || ''));
+    if (ready) {
+      // v4.1 nests files as {n, s, l, e:[children]}; older responses list links as {filename, size, link}
       const files = [];
-      const walk = (arr, prefix) => (arr || []).forEach(f => f.e ? walk(f.e, prefix + f.n + '/') : files.push({ n: prefix + f.n, l: f.l, s: f.s || 0 }));
-      walk(mg.files, '');
-      const video = files.filter(f => /\.(mkv|mp4|avi|m4v|ts|webm)$/i.test(f.n)).sort((a, b) => b.s - a.s)[0];
-      if (!video) throw new Error('no video file');
+      const walk = (arr, prefix) => (arr || []).forEach(f => Array.isArray(f.e) ? walk(f.e, prefix + f.n + '/') : files.push({ n: prefix + (f.n || f.filename || ''), l: f.l || f.link, s: f.s || f.size || 0 }));
+      walk(mg.files || mg.links, '');
+      const video = files.filter(f => f.l && /\.(mkv|mp4|avi|m4v|ts|webm)$/i.test(f.n)).sort((a, b) => b.s - a.s)[0];
+      if (!video) throw new Error('no video file in ' + files.length + ' files');
       const un = await getJson(`${base}/link/unlock?${q}&link=${encodeURIComponent(video.l)}`);
-      if (!un.data || !un.data.link) throw new Error('unlock failed');
+      if (un.status !== 'success' || !un.data || !un.data.link) throw adError(un, 'unlock');
       return un.data.link;
     }
-    if (mg && /Error|Expired|Upload fail/i.test(mg.status)) throw new Error('alldebrid ' + mg.status);
+    if (mg && (mg.statusCode >= 5 || /Error|Expired|Upload fail/i.test(mg.status || ''))) throw new Error('alldebrid ' + mg.status);
     await new Promise(r => setTimeout(r, 5000));
   }
-  throw new Error('alldebrid not cached');
+  throw new Error('alldebrid not ready');
 }
 
 async function alldebridRelease(c) {
