@@ -13,6 +13,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = __dirname;
 const CANDS = path.join(ROOT, 'data', 'dubcands.json');
+const SOURCES = path.join(ROOT, 'data', 'dub_sources.json'); // written by the source-sweep workflow: releases + known-dubbed titles + group patterns
 const CACHE = path.join(ROOT, 'data', 'cache.json');
 const OUT = process.env.DUB_OUT || path.join(ROOT, 'docs', 'dub.json');
 const TORRENTIO = 'https://torrentio.strem.fun/stream/movie/';
@@ -29,7 +30,9 @@ const RULES = 2;
 const DUB_NAME = /heb(?:rew)?[\s._-]*(?:dub|audio)|dub(?:bed)?[\s._-]*heb|hebdub|מדובב/i;
 const HEB_LANG = /^(he|heb|hebrew|iw)$/i;
 const MAX_PROBES_PER_TITLE = 6;
-const CONCURRENCY = 3;
+const MAX_PROBES_PRIORITY = 10; // films known to have an official Hebrew dub
+const CONCURRENCY = 4;
+let FULL_AUDIO = /somniware/i; // release groups proven to keep every dub; extended from dub_sources.json patterns
 const PROBE_TIMEOUT_MS = Number(process.env.PROBE_TIMEOUT_MS || 150000);
 const KIDS = new Set(['animation', 'family']);
 const KW_QUERIES = ['hebrew dubbed', 'hebdub', 'heb dubbed', 'hebrew dub'];
@@ -65,7 +68,7 @@ function parseStream(s) {
   const explicit = DUB_NAME.test(name);
   const flagged = langLine.includes(IL);
   const multi = /multi|dual[\s._-]*audio|multi[\s._-]*audio/i.test(name) || /multi audio/i.test(langLine);
-  const fullAudioGroup = /somniware/i.test(name);
+  const fullAudioGroup = FULL_AUDIO.test(name);
   const subNote = /sub(?:s|titles?)?\s*\([^)]*heb/i.test(name);
   // releases that are "multi" for another market (Russian/French/Latin/Polish/Italian dubs) rarely carry Hebrew
   const otherMarket = /[Ѐ-ӿ]|\b(?:vff?|vf2|vfq|truefrench|french|latino|dublado|pldub|lektor|ita-eng|ita\b|hindi|tamil|telugu)\b/i.test(name);
@@ -252,9 +255,19 @@ function needsCheck(m, res, now) {
 // best release first: Hebrew as the default track, then smaller files (1080p multi before 20 GB 4K multi)
 const rank = d => (d.hebOnly ? 0 : 1) * 1e9 + (d.size || 1e6);
 
-async function checkTitle(m, res, kwByTitle) {
+async function metaFor(tt) {
+  try {
+    const m = (await getJson(`${CINEMETA}/meta/movie/${tt}.json`, 20000)).meta;
+    if (!m || !m.name) return null;
+    const y = m.year || (String(m.releaseInfo || '').match(/\d{4}/) || [])[0];
+    return { id: tt, type: 'movie', name: m.name, poster: m.poster, description: m.description, year: y, released: m.released || (y ? `${y}-01-01T00:00:00.000Z` : undefined), imdbRating: m.imdbRating, genres: m.genre || m.genres || [], popRank: 99999, tags: ['src'] };
+  } catch { return null; }
+}
+
+async function checkTitle(m, res, kwByTitle, priority) {
   const entry = { at: Date.now(), tried: [], n: 0, v: RULES };
   const proven = [];
+  const maxProbes = priority ? MAX_PROBES_PRIORITY : MAX_PROBES_PER_TITLE;
   try {
     let streams = [];
     try { streams = (await getJson(`${TORRENTIO}${m.id}.json`)).streams || []; } catch (e) { entry.err = 'torrentio ' + e.message.slice(0, 40); }
@@ -266,7 +279,7 @@ async function checkTitle(m, res, kwByTitle) {
     for (const c of cands) {
       if (seen.has(c.hash)) continue;
       seen.add(c.hash);
-      if (entry.tried.length >= MAX_PROBES_PER_TITLE) break;
+      if (entry.tried.length >= maxProbes) break;
       entry.tried.push(c.hash);
       if (NO_PROBE) { log(`  cand ${m.id} ${m.name}: ${c.name.slice(0, 70)} explicit=${c.explicit} multi=${c.multi} seeds=${c.seeds}`); continue; }
       c.film = m.name;
@@ -329,11 +342,42 @@ async function main() {
       for (const tt of k.tts) { if (!kwByTitle.has(tt)) kwByTitle.set(tt, []); kwByTitle.get(tt).push({ hash, t: r.t, seeds: r.seeds, size: r.size }); }
     }
   }
+  // sweep sources (data/dub_sources.json): extra releases, films known to have an official dub, full-audio groups
+  const priority = new Set();
+  try {
+    const src = JSON.parse(fs.readFileSync(SOURCES, 'utf8'));
+    const groups = ((src.patterns || {}).fullAudioGroups || []).map(g => String(g).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean);
+    if (groups.length) FULL_AUDIO = new RegExp(['somniware', ...groups].join('|'), 'i');
+    let nrel = 0;
+    for (const r of src.releases || []) {
+      const hash = String(r.hash || '').toLowerCase();
+      if (!/^[0-9a-f]{40}$/.test(hash)) continue;
+      let tts = /^tt\d+$/.test(r.tt || '') ? [r.tt] : null;
+      if (!tts) {
+        let k = res.kw[hash];
+        if (!k || !Array.isArray(k.tts) || (!k.tts.length && Date.now() - k.at > DAY)) { k = { t: String(r.name || '').slice(0, 100), tts: await mapToImdb(r.name || '', r.year || 0, res), at: Date.now() }; res.kw[hash] = k; }
+        tts = k.tts;
+      }
+      for (const tt of tts) {
+        if (!res.universe[tt]) { const meta = await metaFor(tt); if (meta) res.universe[tt] = meta; else continue; }
+        if (!kwByTitle.has(tt)) kwByTitle.set(tt, []);
+        if (!kwByTitle.get(tt).some(x => x.hash === hash)) { kwByTitle.get(tt).push({ hash, t: r.name || '', seeds: r.seeds || 0, size: r.size_mb || 0 }); nrel++; }
+      }
+    }
+    let nt = 0;
+    for (const t of src.titles || []) {
+      if (!/^tt\d+$/.test(t.tt || '')) continue;
+      if (!res.universe[t.tt]) { const meta = await metaFor(t.tt); if (meta) res.universe[t.tt] = meta; else continue; }
+      priority.add(t.tt); nt++;
+    }
+    log(`sources: ${nrel} extra releases, ${nt} known-dubbed titles, full-audio groups ${FULL_AUDIO}`);
+  } catch (e) { log(`no sources file (${e.message.slice(0, 40)})`); }
   const movies = Object.values(universe).filter(m => /^tt\d+$/.test(m.id) && m.name);
   const now = Date.now();
   let todo = movies.filter(m => (!ONLY || m.id === ONLY) && needsCheck(m, res, now));
-  // keyword-named films and kids films first, then the newest, then the most popular
-  todo.sort((a, b) => ((kwByTitle.has(b.id) ? 1 : 0) - (kwByTitle.has(a.id) ? 1 : 0)) || (isKids(b) - isKids(a)) || (yearOf(b) - yearOf(a)) || ((a.popRank ?? 99999) - (b.popRank ?? 99999)));
+  // films with a named release first, then known-dubbed titles, then kids films, then the newest, then the most popular
+  const w = m => (kwByTitle.has(m.id) ? 4 : 0) + (priority.has(m.id) ? 2 : 0) + (isKids(m) ? 1 : 0);
+  todo.sort((a, b) => (w(b) - w(a)) || (yearOf(b) - yearOf(a)) || ((a.popRank ?? 99999) - (b.popRank ?? 99999)));
   if (LIMIT) todo = todo.slice(0, LIMIT);
   log(`universe ${movies.length}, dubbed so far ${Object.keys(res.items).length}, to check ${todo.length}, proof via ${ALLDEBRID_KEY ? 'alldebrid' : 'none'}`);
   let n = 0, found = 0;
@@ -341,7 +385,7 @@ async function main() {
   const worker = async () => {
     while (next < todo.length) {
       const m = todo[next++];
-      if (await checkTitle(m, res, kwByTitle)) found++;
+      if (await checkTitle(m, res, kwByTitle, priority.has(m.id))) found++;
       n++;
       if (n % 10 === 0) { save(res); log(`${n}/${todo.length} found ${found}`); }
       await new Promise(r => setTimeout(r, 300));
