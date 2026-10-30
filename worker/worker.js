@@ -42,7 +42,7 @@ const SERIES = [
 
 const MOVIES = [
   // Hebrew-DUBBED films (audio proven by dubscan.js, not subtitles). Items come from docs/dub.json, not the subs index.
-  { id: 'heb-m-dubbed', name: '🗣️ מדובב לעברית', dub: true, pick: (l, ctx) => Object.values((ctx && ctx.dub) || {}).sort((a, b) => byReleased(a, b) || byPop(a, b)) },
+  { id: 'heb-m-dubbed', name: '🗣️ דיבוב עברית מלא', dub: true, pick: (l, ctx) => Object.values((ctx && ctx.dub) || {}).sort((a, b) => byReleased(a, b) || byPop(a, b)) },
   { id: 'heb-cinema-new', name: '🎞️ קולנוע: חדש בעברית', shape: 'landscape', pick: l => { const cut = Date.now() - 180 * 864e5; return l.filter(m => m.released && Date.parse(m.released) >= cut).sort((a, b) => ((b.hebrewSince || 0) - (a.hebrewSince || 0)) || byReleased(a, b)); } },
   { id: 'heb-m-new', name: '🔥 סרטים חדשים בעברית', pick: l => l.filter(isRecent).sort(byReleased) },
   { id: 'heb-m-top10', name: '🔟 טופ 10 סרטים בעברית', numbered: true, pick: l => l.slice().sort(byPop).slice(0, 10) },
@@ -78,7 +78,7 @@ const MANIFEST = {
   id: 'org.kanashti.hebrew-catalog',
   version: '3.3.0',
   name: 'עם עברית',
-  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: שורת סרטים מדובבים לעברית, כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם, תקציר וטריילר מתורגם. מתעדכן אוטומטית כל 3 שעות.',
+  description: 'סרטים וסדרות עם כתוביות בעברית בלבד, בעיצוב של נטפליקס: שורת סרטים בדיבוב עברית מלא (לא כתוביות), כרטיסים רחבים, טופ 10, פנינים נסתרות וקלאסיקות, עם שם, תקציר וטריילר מתורגם. מתעדכן אוטומטית כל 3 שעות.',
   logo: 'https://i0.wp.com/kodibeginner.com/wp-content/uploads/2020/10/ktuvit-me.jpg?w=300&ssl=1',
   resources: ['catalog', 'meta', 'stream'],
   types: ['movie', 'series'],
@@ -194,7 +194,7 @@ async function loadDub() {
   return dubCache;
 }
 
-const DUB_TAG = '🗣️ קיים דיבוב לעברית';
+const DUB_TAG = '🗣️ דיבוב עברית מלא (לא כתוביות)';
 const withDubTag = (desc, dubbed) => (dubbed ? `${DUB_TAG}\n\n${desc || ''}`.trim() : desc);
 
 let subsCache = { at: 0, items: {} };
