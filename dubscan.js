@@ -13,7 +13,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = __dirname;
 const CACHE = path.join(ROOT, 'data', 'cache.json');
-const OUT = path.join(ROOT, 'docs', 'dub.json');
+const OUT = process.env.DUB_OUT || path.join(ROOT, 'docs', 'dub.json');
 const TORRENTIO = 'https://torrentio.strem.fun/stream/movie/';
 const STREMIO_SERVER = process.env.STREMIO_SERVER || 'http://127.0.0.1:11470';
 // AllDebrid refuses API calls from datacenter IPs (AUTH_BLOCKED on GitHub Actions), so the proof runs on the PC:
@@ -98,7 +98,8 @@ async function alldebridUrl(c) {
   c.adId = m.id;
   if (!m.ready) { await alldebridRelease(c); throw new Error('not cached'); }
   for (let i = 0; i < 6; i++) {
-    const st = await getJson(`${base}/magnet/status?${q}&id=${m.id}`);
+    // v4 magnet/status answers DISCONTINUED; v4.1 is the live one (files come as a tree)
+    const st = await getJson(`https://api.alldebrid.com/v4.1/magnet/status?${q}&id=${m.id}`);
     if (st.status !== 'success') throw adError(st, 'status');
     const mg = st.data && st.data.magnets;
     const ready = mg && (mg.statusCode === 4 || /^Ready$/i.test(mg.status || ''));
@@ -121,7 +122,10 @@ async function alldebridUrl(c) {
 
 async function alldebridRelease(c) {
   if (!c.adId) return;
-  try { await getJson(`https://api.alldebrid.com/v4/magnet/delete?agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}&id=${c.adId}`); } catch { /* best effort */ }
+  try {
+    const r = await getJson(`https://api.alldebrid.com/v4/magnet/delete?agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}&id=${c.adId}`);
+    if (r.status !== 'success') log(`  alldebrid delete ${c.adId} failed: ${(r.error && r.error.code) || JSON.stringify(r).slice(0, 80)}`);
+  } catch (e) { log(`  alldebrid delete ${c.adId} failed: ${e.message.slice(0, 80)}`); }
 }
 
 async function probe(c) {

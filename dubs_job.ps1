@@ -16,7 +16,7 @@ try {
   git pull --rebase -q 2>&1 | Out-File $log -Append -Encoding utf8
   $n = 0
   while ($n -lt $Total) {
-    node dubscan.js --limit $Chunk 2>&1 | Select-String -Pattern "FOUND|DROP|done:|movies |fail " | ForEach-Object { $_.Line } | Out-File $log -Append -Encoding utf8
+    node dubscan.js --limit $Chunk 2>&1 | Select-String -Pattern "FOUND|DROP|done:|movies |fail |delete " | ForEach-Object { $_.Line } | Out-File $log -Append -Encoding utf8
     git add docs/dub.json 2>&1 | Out-Null
     git -c core.autocrlf=false commit -q -m "dubs $(Get-Date -Format yyyy-MM-ddTHH:mm)" 2>&1 | Out-Null
     git pull --rebase -q 2>&1 | Out-File $log -Append -Encoding utf8
