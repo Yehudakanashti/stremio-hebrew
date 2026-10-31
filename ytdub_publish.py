@@ -111,6 +111,26 @@ if IA and os.path.exists(os.path.join(IA, 'ia_verified.json')):
         m['urls'] = v.get('urls') or [{'url': v['url'], 'file': v.get('file'), 'mins': v.get('mins')}]
         m.setdefault('yt', [])
         items[tt] = m
-json.dump({'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'items': items},
-          open(OUT, 'w', encoding='utf-8', newline='\n'), ensure_ascii=False)
-print('ytdub: %d films' % len(items))
+# sources the health checks found gone (YouTube removed the video / archive.org file 404): out of the row, and a film
+# left with no source leaves the row
+def dead_set(path):
+    try:
+        return {k for k, v in json.load(open(path, encoding='utf-8')).items() if v.get('dead')}
+    except Exception:
+        return set()
+dead_yt = dead_set(os.path.join(SRC, 'dead.json'))
+dead_ia = dead_set(os.path.join(IA, 'dead.json')) if IA else set()
+for tt in list(items):
+    m = items[tt]
+    m['yt'] = [y for y in m.get('yt') or [] if y['id'] not in dead_yt]
+    if 'urls' in m:
+        m['urls'] = [u for u in m['urls'] if u['url'] not in dead_ia]
+        if not m['urls']:
+            del m['urls']
+    if not m['yt'] and not m.get('urls'):
+        print('no source left, dropped', tt, m.get('name'))
+        del items[tt]
+if items != old:  # unchanged rows keep their file (and date), so a round with nothing new commits nothing
+    json.dump({'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'items': items},
+              open(OUT, 'w', encoding='utf-8', newline='\n'), ensure_ascii=False)
+print('ytdub: %d films%s' % (len(items), '' if items != old else ' (unchanged)'))

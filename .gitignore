@@ -8,3 +8,11 @@ dubs_job.log
 dubs_job.lock
 adgrow.log
 data/adgrow_state.json
+grow/grow.log
+grow/grow.log.1
+adgrow.log.1
+grow/round.lock
+grow/clips/
+grow/__pycache__/
+data/grow_state.json
+*.tmp

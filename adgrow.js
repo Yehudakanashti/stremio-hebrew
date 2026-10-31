@@ -93,6 +93,7 @@ function publish(added) {
   git('add', 'docs/dub.json', 'docs/dubrel.json', 'data/dub_pending.json');
   const msg = `dub row: +${added.length} film(s) that open in Hebrew and play now (${added.join(', ')})\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`;
   const c = git('commit', '-m', msg);
+  git('pull', '--rebase', '--autostash');  // the CI scan pushes every 3 hours: rebase onto it before pushing
   const p = git('push');
   spawnSync('gh', ['api', '-X', 'POST', 'repos/Yehudakanashti/stremio-hebrew/pages/builds'], { windowsHide: true });
   log(`published row +${added.length}: commit ${c.status === 0 ? 'ok' : 'FAILED ' + (c.stderr || c.stdout).slice(0, 200)} push ${p.status === 0 ? 'ok' : 'FAILED ' + (p.stderr || '').slice(0, 200)}`);

@@ -64,6 +64,9 @@ try {
   const cands = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'dubcands.json'), 'utf8')).items || {};
   for (const [tt, f] of Object.entries(films)) if (!f.n && cands[tt]) { f.n = cands[tt].name; f.y = f.y || Number(String(cands[tt].year || '').slice(0, 4)) || null; }
 } catch { /* optional */ }
-fs.writeFileSync(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), films }));
+let prev = {};
+try { prev = JSON.parse(fs.readFileSync(OUT, 'utf8')).films || {}; } catch { /* first run */ }
+// an unchanged feed keeps its file, so the 20-minute updater (grow/round.py) commits only real changes
+if (JSON.stringify(prev) !== JSON.stringify(films)) fs.writeFileSync(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), films }));
 const nrel = Object.values(films).reduce((s, f) => s + f.r.length, 0);
 console.log(`dubrel: ${Object.keys(films).length} films, ${nrel} releases`);
