@@ -4,6 +4,7 @@
 # Usage: python ytdub_publish.py <dir with verified.json and names.json>
 import json, os, re, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # Hebrew/emoji titles on a cp1255 console
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = sys.argv[1]
@@ -51,9 +52,35 @@ def build(tt):
     }
 
 ok = [tt for tt, v in ver.items() if v.get('ok')]
+tok = lambda s: set(t for t in re.sub(r'[^0-9a-zא-ת]+', ' ', str(s or '').lower()).split() if len(t) > 1)
+toks = lambda s: [t for t in re.sub(r'[^0-9a-zא-ת]+', ' ', str(s or '').lower()).split()]
+heb_name = lambda tt: (names.get(tt) or {}).get('he') or ver[tt]['ok'].get('he') or ''
+# franchise main titles ("הפוני הקטן שלי", "ברבי") shared by several films
+mains = {}
+for t, f in names.items():
+    if f.get('he'):
+        mains.setdefault(f['he'].partition(':')[0].strip(), set()).add(t)
+
+def strict_ok(tt):
+    he, title = heb_name(tt), ver[tt]['ok'].get('title') or ''
+    vt, ht = toks(title), toks(he)
+    # sequel guard: a small number in the video title ("גשם של פלאפל 2") must be in the film's name
+    if {t for t in vt if t.isdigit() and len(t) <= 2} - {t for t in ht if t.isdigit()}:
+        return False
+    main, _, sub = he.partition(':')
+    sw = [t for t in toks(sub) if len(t) > 1 and not t.isdigit()]
+    if sw and len(mains.get(main.strip(), ())) > 1:
+        has = lambda w: any(x == w or x == 'ה' + w or x == 'ו' + w for x in vt)
+        if sum(has(w) for w in sw) < max(1, -(-len(sw) * 6 // 10)):
+            return False
+    return True
+
+for tt in list(ok):
+    if not strict_ok(tt):
+        ok.remove(tt)
+        print('strict gate dropped', tt, heb_name(tt), '<-', ver[tt]['ok'].get('title', '')[:60])
 # one video belongs to one film: when a video was matched to several films keep the one whose Hebrew title shares
 # the most words with the video title (the longer, more specific name)
-tok = lambda s: set(t for t in re.sub(r'[^0-9a-zא-ת]+', ' ', str(s or '').lower()).split() if len(t) > 1)
 by_vid = {}
 for tt in ok:
     by_vid.setdefault(ver[tt]['ok']['id'], []).append(tt)
