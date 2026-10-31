@@ -9,7 +9,7 @@
 // Flags: --limit N (titles per run), --only ttXXXX, --force, --no-probe (list candidates only)
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 
 const ROOT = __dirname;
 const CANDS = path.join(ROOT, 'data', 'dubcands.json');
@@ -26,12 +26,12 @@ const ALLDEBRID_KEY = process.env.ALLDEBRID_KEY || (fs.existsSync(KEY_FILE) ? fs
 const AD = 'https://api.alldebrid.com';
 const DAY = 864e5;
 const IL = '\u{1F1EE}\u{1F1F1}';
-const RULES = 2;
+const RULES = 3; // v3 (31.10.26): P2P proof through the Stremio server, weak candidates only for known-dubbed films
 const DUB_NAME = /heb(?:rew)?[\s._-]*(?:dub|audio)|dub(?:bed)?[\s._-]*heb|hebdub|מדובב/i;
 const HEB_LANG = /^(he|heb|hebrew|iw)$/i;
 const MAX_PROBES_PER_TITLE = 6;
 const MAX_PROBES_PRIORITY = 10; // films known to have an official Hebrew dub
-const CONCURRENCY = 4;
+const CONCURRENCY = Number(process.env.DUB_CONCURRENCY || 8);
 let FULL_AUDIO = /somniware/i; // release groups proven to keep every dub; extended from dub_sources.json patterns
 const PROBE_TIMEOUT_MS = Number(process.env.PROBE_TIMEOUT_MS || 150000);
 const KIDS = new Set(['animation', 'family']);
@@ -44,6 +44,7 @@ const LIMIT = Number(flag('--limit', 0)) || 0;
 const ONLY = flag('--only', null);
 const FORCE = args.includes('--force');
 const NO_PROBE = args.includes('--no-probe');
+const USE_AD = args.includes('--alldebrid'); // opt-in only: AllDebrid uploads count toward his account's magnet limit
 
 async function getJson(url, ms = 40000, init = {}) {
   const ctrl = new AbortController();
@@ -148,21 +149,37 @@ async function runtimeOf(tt) {
 const durationFits = (seconds, min) => !min || !seconds || Math.abs(seconds / 60 - min) <= Math.max(4, min * 0.06);
 
 // ---------- proof ----------
-function runProbe(url) {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-probesize', '32M', '-analyzeduration', '5M', '-rw_timeout', '60000000',
-    '-show_entries', 'stream=index,codec_type:stream_tags=language,title:format=duration', '-of', 'json', url], { encoding: 'utf8', timeout: PROBE_TIMEOUT_MS });
-  if (r.status !== 0) return { ok: false, err: (r.stderr || (r.error && r.error.message) || 'ffprobe failed').trim().slice(0, 160) };
+// ffprobe runs asynchronously so the other workers keep going while one waits on a slow torrent
+function ffprobeAsync(url, ms) {
+  return new Promise(resolve => {
+    const p = spawn('ffprobe', ['-v', 'error', '-probesize', '32M', '-analyzeduration', '5M', '-rw_timeout', '45000000',
+      '-show_entries', 'stream=index,codec_type:stream_tags=language,title:format=duration', '-of', 'json', url], { windowsHide: true });
+    let out = '', err = '';
+    p.stdout.on('data', d => { out += d; });
+    p.stderr.on('data', d => { err += d; });
+    const t = setTimeout(() => { try { p.kill(); } catch { /* gone */ } }, ms);
+    p.on('close', code => { clearTimeout(t); resolve({ code, out, err }); });
+    p.on('error', e => { clearTimeout(t); resolve({ code: -1, out, err: e.message }); });
+  });
+}
+function readTracks(stdout, explicit) {
   let d;
-  try { d = JSON.parse(r.stdout); } catch { return { ok: false, err: 'bad ffprobe json' }; }
+  try { d = JSON.parse(stdout); } catch { return null; }
   const seconds = Number(d.format && d.format.duration) || 0;
   const audio = (d.streams || []).filter(x => x.codec_type === 'audio');
   const langs = audio.map(x => String((x.tags && (x.tags.language || x.tags.LANGUAGE)) || 'und').toLowerCase());
   const titles = audio.map(x => String((x.tags && (x.tags.title || x.tags.TITLE)) || ''));
   const hebIdx = langs.findIndex((l, i) => HEB_LANG.test(l) || /hebrew|עברית/i.test(titles[i]));
-  const hebrew = hebIdx >= 0;
+  // an explicit Hebrew-dub release with a single untagged track is its Hebrew track (old Israeli rips carry no language tags)
+  const untaggedSingle = audio.length === 1 && langs[0] === 'und' && explicit;
+  const hebrew = hebIdx >= 0 || untaggedSingle;
   // Hebrew is what plays by default when it is the only track or the first one
-  const hebOnly = hebrew && (audio.length === 1 || hebIdx === 0);
-  return { ok: true, langs, hebrew, hebOnly, audio: audio.length, seconds };
+  return { ok: true, langs, hebrew, hebOnly: hebrew && (audio.length === 1 || hebIdx <= 0), audio: audio.length, seconds };
+}
+async function runProbe(url, explicit) {
+  const r = await ffprobeAsync(url, PROBE_TIMEOUT_MS);
+  if (r.code !== 0) return { ok: false, err: (r.err || 'ffprobe failed').trim().slice(0, 160) };
+  return readTracks(r.out, explicit) || { ok: false, err: 'bad ffprobe json' };
 }
 
 const adError = (r, what) => new Error(`alldebrid ${what}: ${(r && r.error && (r.error.code || r.error.message)) || JSON.stringify(r).slice(0, 100)}`);
@@ -218,27 +235,58 @@ async function loadPreexisting() {
   } catch (e) { log(`alldebrid list failed: ${e.message.slice(0, 60)}`); }
 }
 
-// Fallback for releases AllDebrid has not cached: read the header through Stremio's own torrent engine (the same P2P path
-// Stremio uses when he presses play). Proves the Hebrew track AND that the torrent is alive.
+// The proof path: Stremio's own torrent engine (the server the app runs on 127.0.0.1:11470), i.e. exactly the P2P path our
+// "🗣️ דיבוב עברית" stream plays through. It proves the Hebrew track AND that the torrent has live peers.
+// AllDebrid is not used by default: every probe there is a magnet upload and the account allows only ~1000 per period
+// (MAGNET_TOO_MANY "Magnets limit reached (1000 accross all tabs)", hit on 31.10.26, which also blocks his own playback).
 const STREMIO = process.env.STREMIO_SERVER || 'http://127.0.0.1:11470';
+const TRACKERS = ['udp://tracker.opentrackr.org:1337/announce', 'udp://open.stealth.si:80/announce', 'udp://tracker.torrent.eu.org:451/announce', 'udp://exodus.desync.com:6969/announce', 'udp://open.demonii.com:1337/announce'];
+const VIDEO = /\.(mkv|mp4|avi|m4v|ts|webm|mpg)$/i;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function sjson(url, init = {}) {
+  const r = await fetch(url, { ...init, signal: AbortSignal.timeout(10000) });
+  return r.json();
+}
 async function probeP2P(c) {
-  try { await fetch(`${STREMIO}/stats.json`, { signal: AbortSignal.timeout(5000) }); } catch { return { ok: false, err: 'stremio server not running' }; }
-  const idx = Number.isInteger(c.fileIdx) ? c.fileIdx : 0;
-  const r = spawnSync('ffprobe', ['-v', 'error', '-probesize', '32M', '-analyzeduration', '5M', '-rw_timeout', '45000000',
-    '-show_entries', 'stream=index,codec_type:stream_tags=language,title:format=duration', '-of', 'json', `${STREMIO}/${c.hash}/${idx}`], { encoding: 'utf8', timeout: 120000 });
-  try { await fetch(`${STREMIO}/${c.hash}/remove`, { signal: AbortSignal.timeout(5000) }); } catch { /* best effort */ }
-  if (r.status !== 0) return { ok: false, err: 'p2p: ' + (r.stderr || (r.error && r.error.message) || 'no peers').trim().slice(0, 80) };
-  let d;
-  try { d = JSON.parse(r.stdout); } catch { return { ok: false, err: 'p2p: bad ffprobe json' }; }
-  const seconds = Number(d.format && d.format.duration) || 0;
-  const audio = (d.streams || []).filter(x => x.codec_type === 'audio');
-  const langs = audio.map(x => String((x.tags && (x.tags.language || x.tags.LANGUAGE)) || 'und').toLowerCase());
-  const titles = audio.map(x => String((x.tags && (x.tags.title || x.tags.TITLE)) || ''));
-  const hebIdx = langs.findIndex((l, i) => HEB_LANG.test(l) || /hebrew|עברית/i.test(titles[i]));
-  // an explicit Hebrew-dub release with a single untagged track is its Hebrew track (old Israeli rips carry no language tags)
-  const untaggedSingle = audio.length === 1 && langs[0] === 'und' && c.explicit;
-  const hebrew = hebIdx >= 0 || untaggedSingle;
-  return { ok: true, langs, hebrew, hebOnly: hebrew && (audio.length === 1 || hebIdx === 0), audio: audio.length, seconds, p2p: true };
+  try { await fetch(`${STREMIO}/stats.json`, { signal: AbortSignal.timeout(5000) }); } catch { return { ok: false, err: 'p2p: stremio server not running' }; }
+  const sources = [...TRACKERS.map(t => 'tracker:' + t), 'dht:' + c.hash];
+  try {
+    try {
+      await sjson(`${STREMIO}/${c.hash}/create`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ torrent: { infoHash: c.hash }, peerSearch: { sources, min: 40, max: 150 } }) });
+    } catch (e) { return { ok: false, err: 'p2p: create failed ' + e.message.slice(0, 40) }; }
+    // metadata and a first peer within ~36 s, or the torrent counts as dead
+    let st = null;
+    for (let i = 0; i < 12; i++) {
+      await sleep(3000);
+      try { st = await sjson(`${STREMIO}/${c.hash}/stats.json`); } catch { st = null; }
+      if (st && Array.isArray(st.files) && st.files.length && st.peers > 0) break;
+    }
+    if (!st || !Array.isArray(st.files) || !st.files.length) return { ok: false, err: 'p2p: no metadata (dead torrent)' };
+    if (!(st.peers > 0)) return { ok: false, err: 'p2p: no peers' };
+    const files = st.files.map((f, i) => ({ i, n: String(f.path || f.name || ''), s: f.length || 0 }));
+    const videos = files.filter(f => VIDEO.test(f.n) && f.s > 100 * 1048576).sort((a, b) => b.s - a.s);
+    let video = null;
+    // Torrentio's fileIdx already points at this film's file (also inside packs)
+    if (!c.kw && Number.isInteger(c.fileIdx) && files[c.fileIdx] && VIDEO.test(files[c.fileIdx].n)) video = files[c.fileIdx];
+    else if (videos.length === 1) video = videos[0];
+    else if (videos.length > 1) {
+      const toks = norm(c.film || '').split(' ').filter(t => t.length > 1);
+      const match = videos.filter(f => { const n = norm(f.n); return toks.length && toks.filter(t => n.includes(t)).length >= Math.ceil(toks.length * 0.7); });
+      if (match.length !== 1) return { ok: false, err: `p2p: pack of ${videos.length} videos, ${match.length} match the title` };
+      video = match[0];
+      c.packFile = video.n;
+    }
+    if (!video) return { ok: false, err: 'p2p: no video file' };
+    c.fileIdx = video.i;
+    c.size = c.size || Math.round(video.s / 1048576);
+    const r = await ffprobeAsync(`${STREMIO}/${c.hash}/${video.i}`, 150000);
+    if (r.code !== 0) return { ok: false, err: 'p2p: ' + (r.err || 'read failed').trim().slice(0, 80) };
+    const t = readTracks(r.out, c.explicit);
+    return t ? { ...t, p2p: true } : { ok: false, err: 'p2p: bad ffprobe json' };
+  } finally {
+    try { await fetch(`${STREMIO}/${c.hash}/remove`, { signal: AbortSignal.timeout(5000) }); } catch { /* best effort */ }
+  }
 }
 
 async function alldebridRelease(c) {
@@ -250,7 +298,7 @@ async function alldebridRelease(c) {
 }
 
 async function probe(c) {
-  if (!ALLDEBRID_KEY) return { ok: false, err: 'no alldebrid key' };
+  if (!USE_AD || !ALLDEBRID_KEY || adBlocked) return probeP2P(c);
   let url;
   try { url = await alldebridUrl(c); }
   catch (e) {
@@ -264,7 +312,7 @@ async function probe(c) {
     return { ok: false, err: e.message.slice(0, 120) };
   }
   let p;
-  try { p = runProbe(url); }
+  try { p = await runProbe(url, c.explicit); }
   finally {
     // a proven dub STAYS in his AllDebrid list (so the debrid Library addon can serve it instantly); everything else is removed
     if (!(p && p.ok && p.hebrew)) await alldebridRelease(c);
@@ -316,7 +364,9 @@ async function checkTitle(m, res, kwByTitle, priority) {
   const entry = { at: Date.now(), tried: [...prevTried], n: 0, v: RULES };
   const proven = [];
   const maxProbes = (priority ? MAX_PROBES_PRIORITY : MAX_PROBES_PER_TITLE) + prevTried.size;
-  const deep = priority || isKids(m);
+  // weak candidates (multi releases with no Hebrew evidence) are probed only for films known to have a Hebrew dub, at most 2
+  const deep = priority;
+  let weak = 0;
   try {
     let streams = [];
     try { streams = (await getJson(`${TORRENTIO}${m.id}.json`)).streams || []; } catch (e) { entry.err = 'torrentio ' + e.message.slice(0, 40); }
@@ -328,7 +378,7 @@ async function checkTitle(m, res, kwByTitle, priority) {
     for (const c of cands) {
       if (seen.has(c.hash)) continue;
       seen.add(c.hash);
-      if (!c.strong && !deep) continue;
+      if (!c.strong) { if (!deep || weak >= 2) continue; weak++; }
       if (entry.tried.length >= maxProbes) break;
       if (adBlocked) { entry.retry = true; break; }
       entry.tried.push(c.hash);
@@ -383,7 +433,7 @@ async function main() {
     for (const v of Object.values(JSON.parse(fs.readFileSync(CACHE, 'utf8')).items)) if (v.type === 'movie') universe[v.id] = { ...v, tags: ['top'] };
   }
   res.universe = universe;
-  if (ALLDEBRID_KEY && !NO_PROBE) await loadPreexisting();
+  if (USE_AD && ALLDEBRID_KEY && !NO_PROBE) await loadPreexisting();
   // films whose last check hit a transient failure (e.g. AllDebrid MAGNET_TOO_MANY) are checked again
   for (const [tt, v] of Object.entries(res.checked)) if (v.retry && !res.items[tt]) delete res.checked[tt];
   // keyword releases -> titles
@@ -443,7 +493,7 @@ async function main() {
   const w = m => (kwByTitle.has(m.id) ? 4 : 0) + (priority.has(m.id) ? 2 : 0) + (isKids(m) ? 1 : 0);
   todo.sort((a, b) => (w(b) - w(a)) || (yearOf(b) - yearOf(a)) || ((a.popRank ?? 99999) - (b.popRank ?? 99999)));
   if (LIMIT) todo = todo.slice(0, LIMIT);
-  log(`universe ${movies.length}, dubbed so far ${Object.keys(res.items).length}, to check ${todo.length}, proof via ${ALLDEBRID_KEY ? 'alldebrid' : 'none'}`);
+  log(`universe ${movies.length}, dubbed so far ${Object.keys(res.items).length}, to check ${todo.length}, proof via ${USE_AD && ALLDEBRID_KEY ? 'alldebrid + p2p' : 'p2p (stremio server)'}`);
   let n = 0, found = 0;
   let next = 0;
   const worker = async () => {
