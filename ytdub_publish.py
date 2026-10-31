@@ -51,6 +51,20 @@ def build(tt):
     }
 
 ok = [tt for tt, v in ver.items() if v.get('ok')]
+# one video belongs to one film: when a video was matched to several films keep the one whose Hebrew title shares
+# the most words with the video title (the longer, more specific name)
+tok = lambda s: set(t for t in re.sub(r'[^0-9a-zא-ת]+', ' ', str(s or '').lower()).split() if len(t) > 1)
+by_vid = {}
+for tt in ok:
+    by_vid.setdefault(ver[tt]['ok']['id'], []).append(tt)
+for vid, tts in by_vid.items():
+    if len(tts) > 1:
+        title = tok(ver[tts[0]]['ok'].get('title'))
+        best = max(tts, key=lambda t: (len(tok((names.get(t) or {}).get('he')) & title), len(tok((names.get(t) or {}).get('he')))))
+        for t in tts:
+            if t != best:
+                ok.remove(t)
+        print('video', vid, 'kept for', best, 'dropped', [t for t in tts if t != best])
 with ThreadPoolExecutor(max_workers=4) as ex:
     items = dict(ex.map(build, ok))
 for tt, v in old.items():  # keep earlier proven films (a later run may only add)
