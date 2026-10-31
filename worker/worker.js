@@ -196,6 +196,65 @@ async function loadDub() {
 
 const DUB_TAG = '🗣️ דיבוב עברית מלא (לא כתוביות)';
 
+// ---- Torznab feed of every known Hebrew-dub release (docs/dubrel.json), read by his AIOStreams "Torznab" addon.
+// AIOStreams resolves the torrents through his debrid service, so dubbed films play like every other stream he watches.
+const DUBREL_URL = 'https://yehudakanashti.github.io/stremio-hebrew/dubrel.json';
+let dubrelCache = { at: 0, films: {} };
+async function loadDubRel() {
+  if (Date.now() - dubrelCache.at < INDEX_TTL_MS && dubrelCache.at) return dubrelCache;
+  try {
+    const r = await fetch(DUBREL_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) dubrelCache = { at: Date.now(), films: (await r.json()).films || {} };
+    else dubrelCache.at = Date.now();
+  } catch { dubrelCache.at = Date.now(); }
+  return dubrelCache;
+}
+const xmlEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const tzNorm = s => String(s || '').toLowerCase().replace(/['’"]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9֐-׿]+/g, ' ').trim();
+const TZ_HEB = /hebdub|heb[ ._-]?dub|hebrew|מדובב|דיבוב/i;
+const TORZNAB_CAPS = '<?xml version="1.0" encoding="UTF-8"?><caps><server title="Hebrew Dubs" /><limits default="100" max="100" />'
+  + '<searching><search available="yes" supportedParams="q" /><movie-search available="yes" supportedParams="q,imdbid" />'
+  + '<tv-search available="no" supportedParams="q" /></searching><categories><category id="2000" name="Movies" /></categories></caps>';
+function torznabRss(picks) {
+  const items = picks.map(r => {
+    const bytes = Math.max(1, Math.round((r.mb || 1500) * 1048576));
+    // the Hebrew marker in the title lets AIOStreams tag the language (its formatter then shows "דיבוב עברי")
+    const title = TZ_HEB.test(r.n) ? r.n : `${r.n} Hebrew Dubbed`;
+    const magnet = `magnet:?xt=urn:btih:${r.h}&dn=${encodeURIComponent(title)}`;
+    const seeds = Math.max(1, r.s || 0);
+    return `<item><title>${xmlEsc(title)}</title><guid isPermaLink="false">${r.h}</guid><link>${xmlEsc(magnet)}</link>`
+      + `<pubDate>Sat, 01 Jan 2022 00:00:00 +0000</pubDate><size>${bytes}</size><category>2000</category>`
+      + `<enclosure url="${xmlEsc(magnet)}" length="${bytes}" type="application/x-bittorrent" />`
+      + `<torznab:attr name="category" value="2000" /><torznab:attr name="size" value="${bytes}" />`
+      + `<torznab:attr name="seeders" value="${seeds}" /><torznab:attr name="peers" value="${seeds}" />`
+      + `<torznab:attr name="infohash" value="${r.h}" /><torznab:attr name="magneturl" value="${xmlEsc(magnet)}" />`
+      + `<torznab:attr name="imdbid" value="${String(r.tt || '').replace(/^tt/, '')}" /><torznab:attr name="language" value="Hebrew" /></item>`;
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><title>Hebrew Dubs</title>${items}</channel></rss>`;
+}
+async function torznab(url) {
+  const t = (url.searchParams.get('t') || 'search').toLowerCase();
+  if (t === 'caps') return TORZNAB_CAPS;
+  const films = (await loadDubRel()).films;
+  let imdb = (url.searchParams.get('imdbid') || '').trim();
+  if (imdb && !/^tt/i.test(imdb)) imdb = 'tt' + imdb.padStart(7, '0');
+  let picks = [];
+  if (imdb) {
+    if (films[imdb]) picks = films[imdb].r.map(r => ({ ...r, tt: imdb }));
+  } else {
+    const q = tzNorm(url.searchParams.get('q'));
+    const ym = q.match(/\b(19|20)\d\d$/);
+    const qy = ym ? Number(ym[0]) : null;
+    const qn = ym ? q.slice(0, ym.index).trim() : q;
+    if (qn) for (const [tt, f] of Object.entries(films)) {
+      if (tzNorm(f.n) !== qn) continue;
+      if (qy && f.y && Math.abs(f.y - qy) > 1) continue;
+      picks.push(...f.r.map(r => ({ ...r, tt })));
+    }
+  }
+  return torznabRss(picks.slice(0, 100));
+}
+
 // Sub-addon for the dubbed releases themselves (torrent streams). Meant to be wrapped by AIOStreams, which resolves
 // torrents through his AllDebrid; our main manifest stays trailers + catalogs only.
 const DUB_MANIFEST = {
@@ -328,6 +387,13 @@ export default {
     if (p === '/' || p === '') return Response.redirect(SITE_URL, 302);
     if (p === '/manifest.json') return json(MANIFEST);
     if (p === '/dub/manifest.json') return json(DUB_MANIFEST);
+    if (/^\/torznab(\/api)?\/?$/.test(p)) {
+      try {
+        return new Response(await torznab(url), { headers: { ...CORS, 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
+      } catch (e) {
+        return new Response(`<?xml version="1.0" encoding="UTF-8"?><error code="900" description="${xmlEsc(e.message)}" />`, { status: 500, headers: { ...CORS, 'Content-Type': 'application/xml; charset=utf-8' } });
+      }
+    }
     const md = p.match(/^\/dub\/stream\/movie\/(tt\d+)\.json$/);
     if (md) {
       try {
