@@ -182,15 +182,35 @@ async function loadYt() {
 }
 
 let dubCache = { at: 0, items: {} };
+let ytdubCache = { at: 0, items: {} };
 
-// docs/dub.json (dubscan.js): films with a Hebrew AUDIO track in a playable release, each stored with its catalog meta.
+// docs/ytdub.json (yt_dub pipeline on the PC): full Hebrew-dubbed films on YouTube, the speech of the film itself
+// checked as Hebrew. Stremio plays them with its YouTube player, so they work without any debrid service.
+const YTDUB_URL = 'https://yehudakanashti.github.io/stremio-hebrew/ytdub.json';
+async function loadYtDub() {
+  if (Date.now() - ytdubCache.at < INDEX_TTL_MS && ytdubCache.at) return ytdubCache;
+  try {
+    const r = await fetch(YTDUB_URL, { cf: { cacheTtlByStatus: { '200-299': 300, '400-599': 0 }, cacheEverything: true } });
+    if (r.ok) ytdubCache = { at: Date.now(), items: (await r.json()).items || {} };
+    else ytdubCache.at = Date.now() - INDEX_TTL_MS + 30000;
+  } catch { ytdubCache.at = Date.now() - INDEX_TTL_MS + 30000; }
+  return ytdubCache;
+}
+
+// The dubbed row: docs/dub.json (debrid releases proven to open in Hebrew) + docs/ytdub.json (YouTube); dub.json wins.
 async function loadDub() {
   if (Date.now() - dubCache.at < INDEX_TTL_MS && dubCache.at) return dubCache;
+  let own = null;
   try {
-    const r = await fetch(DUB_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
-    if (r.ok) dubCache = { at: Date.now(), items: (await r.json()).items || {} };
-    else dubCache.at = Date.now();
-  } catch { dubCache.at = Date.now(); }
+    const r = await fetch(DUB_URL, { cf: { cacheTtlByStatus: { '200-299': 300, '400-599': 0 }, cacheEverything: true } });
+    if (r.ok) own = (await r.json()).items || {};
+  } catch { /* keep the last good copy */ }
+  const yt = (await loadYtDub()).items;
+  if (own === null) own = Object.fromEntries(Object.entries(dubCache.items).filter(([, v]) => !v.ytOnly));
+  const items = {};
+  for (const [tt, v] of Object.entries(yt)) items[tt] = { ...v, ytOnly: true };
+  Object.assign(items, own);
+  dubCache = { at: Date.now(), items };
   return dubCache;
 }
 
@@ -312,7 +332,16 @@ async function trailerStreams(type, id) {
   // a proven Hebrew-dubbed release goes first (this addon is first in his list, so it is the first stream he sees)
   // Our own P2P dub stream is off (31.10.26): old Hebrew-dub torrents have 0-2 peers and stall on the TV.
   // The dubbed releases now reach him through AIOStreams (Torznab feed below) and play via his debrid service.
+  // A full dubbed film on YouTube is offered first only when no debrid release is proven (debrid quality is higher).
   const first = [];
+  if (type === 'movie') {
+    const dubbed = (await loadDub()).items[id];
+    if (dubbed && dubbed.ytOnly && Array.isArray(dubbed.yt)) {
+      for (const v of dubbed.yt.slice(0, 2)) {
+        first.push({ name: '🗣️ דיבוב עברית', title: `סרט מלא בדיבוב עברית${v.q ? ` · ${v.q}` : ''}`, ytId: v.id, behaviorHints: { notWebReady: true, bingeGroup: 'hebdub-yt' } });
+      }
+    }
+  }
   // `title` only: newer stremio-core treats `title` as an alias of `description` and rejects a stream carrying both.
   if (heb.length) return [...first, { name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
   const found = (await loadYt()).items[id];
