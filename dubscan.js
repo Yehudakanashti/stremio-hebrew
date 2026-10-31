@@ -419,7 +419,9 @@ async function checkTitle(m, res, kwByTitle, priority) {
     };
     log(`FOUND ${m.id} ${m.name} (${m.year}) -> ${best.rel.slice(0, 70)} [${best.hebOnly ? 'hebrew default' : 'multi-audio'}]`);
   } else if (!NO_PROBE && res.items[m.id] && entry.tried.length) {
-    if (res.items[m.id].miss) { delete res.items[m.id]; log(`DROP ${m.id} ${m.name}`); } else res.items[m.id].miss = 1;
+    // the row only shows what plays: an entry proven only through AllDebrid (no live peers) goes at once
+    const p2pProven = (res.items[m.id].dubs || []).some(d => d.p2p);
+    if (res.items[m.id].miss || !p2pProven) { delete res.items[m.id]; log(`DROP ${m.id} ${m.name}`); } else res.items[m.id].miss = 1;
   }
   res.checked[m.id] = entry;
   return proven.length > 0;
