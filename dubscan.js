@@ -171,7 +171,7 @@ async function alldebridUrl(c) {
   const q = `agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}`;
   // upload tells whether the release is already in AllDebrid's cache (`ready`): those are the ones Stremio plays instantly.
   const up = await getJson(`${AD}/v4/magnet/upload?${q}&magnets[]=${c.hash}`);
-  if (up.status !== 'success') throw adError(up, 'upload');
+  if (up.status !== 'success') { if (/TOO_MANY/.test(JSON.stringify(up.error || ''))) adBlocked = true; throw adError(up, 'upload'); }
   const m = up.data && up.data.magnets && up.data.magnets[0];
   if (!m || m.error) throw adError(m, 'magnet');
   c.adId = m.id;
@@ -207,8 +207,42 @@ async function alldebridUrl(c) {
   throw new Error('alldebrid not ready');
 }
 
+// magnets that were in his AllDebrid list before this run are his: never delete them
+const PRE = new Set();
+let adBlocked = false;
+async function loadPreexisting() {
+  try {
+    const r = await getJson(`${AD}/v4.1/magnet/status?agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}`, 60000);
+    for (const m of (r.data && r.data.magnets) || []) PRE.add(String(m.hash || '').toLowerCase());
+    log(`alldebrid list: ${PRE.size} magnets before this run`);
+  } catch (e) { log(`alldebrid list failed: ${e.message.slice(0, 60)}`); }
+}
+
+// Fallback for releases AllDebrid has not cached: read the header through Stremio's own torrent engine (the same P2P path
+// Stremio uses when he presses play). Proves the Hebrew track AND that the torrent is alive.
+const STREMIO = process.env.STREMIO_SERVER || 'http://127.0.0.1:11470';
+async function probeP2P(c) {
+  try { await fetch(`${STREMIO}/stats.json`, { signal: AbortSignal.timeout(5000) }); } catch { return { ok: false, err: 'stremio server not running' }; }
+  const idx = Number.isInteger(c.fileIdx) ? c.fileIdx : 0;
+  const r = spawnSync('ffprobe', ['-v', 'error', '-probesize', '32M', '-analyzeduration', '5M', '-rw_timeout', '45000000',
+    '-show_entries', 'stream=index,codec_type:stream_tags=language,title:format=duration', '-of', 'json', `${STREMIO}/${c.hash}/${idx}`], { encoding: 'utf8', timeout: 120000 });
+  try { await fetch(`${STREMIO}/${c.hash}/remove`, { signal: AbortSignal.timeout(5000) }); } catch { /* best effort */ }
+  if (r.status !== 0) return { ok: false, err: 'p2p: ' + (r.stderr || (r.error && r.error.message) || 'no peers').trim().slice(0, 80) };
+  let d;
+  try { d = JSON.parse(r.stdout); } catch { return { ok: false, err: 'p2p: bad ffprobe json' }; }
+  const seconds = Number(d.format && d.format.duration) || 0;
+  const audio = (d.streams || []).filter(x => x.codec_type === 'audio');
+  const langs = audio.map(x => String((x.tags && (x.tags.language || x.tags.LANGUAGE)) || 'und').toLowerCase());
+  const titles = audio.map(x => String((x.tags && (x.tags.title || x.tags.TITLE)) || ''));
+  const hebIdx = langs.findIndex((l, i) => HEB_LANG.test(l) || /hebrew|עברית/i.test(titles[i]));
+  // an explicit Hebrew-dub release with a single untagged track is its Hebrew track (old Israeli rips carry no language tags)
+  const untaggedSingle = audio.length === 1 && langs[0] === 'und' && c.explicit;
+  const hebrew = hebIdx >= 0 || untaggedSingle;
+  return { ok: true, langs, hebrew, hebOnly: hebrew && (audio.length === 1 || hebIdx === 0), audio: audio.length, seconds, p2p: true };
+}
+
 async function alldebridRelease(c) {
-  if (!c.adId) return;
+  if (!c.adId || PRE.has(String(c.hash).toLowerCase())) return;
   try {
     const r = await getJson(`${AD}/v4/magnet/delete?agent=stremio-hebrew&apikey=${encodeURIComponent(ALLDEBRID_KEY)}&id=${c.adId}`);
     if (r.status !== 'success') log(`  alldebrid delete ${c.adId} failed: ${(r.error && r.error.code) || JSON.stringify(r).slice(0, 80)}`);
@@ -219,7 +253,16 @@ async function probe(c) {
   if (!ALLDEBRID_KEY) return { ok: false, err: 'no alldebrid key' };
   let url;
   try { url = await alldebridUrl(c); }
-  catch (e) { return { ok: false, err: e.message.slice(0, 120) }; }
+  catch (e) {
+    // not on AllDebrid: strong candidates are read through the P2P engine instead
+    if (/not cached/.test(e.message) && c.strong) {
+      const p2 = await probeP2P(c);
+      return p2.ok ? p2 : { ok: false, err: `not cached; ${p2.err}` };
+    }
+    // any failure after the upload (pack, no video, unlock, status) must not leave the magnet in his list
+    if (c.adId && !/not cached/.test(e.message)) await alldebridRelease(c);
+    return { ok: false, err: e.message.slice(0, 120) };
+  }
   let p;
   try { p = runProbe(url); }
   finally {
@@ -287,16 +330,26 @@ async function checkTitle(m, res, kwByTitle, priority) {
       seen.add(c.hash);
       if (!c.strong && !deep) continue;
       if (entry.tried.length >= maxProbes) break;
+      if (adBlocked) { entry.retry = true; break; }
       entry.tried.push(c.hash);
       if (NO_PROBE) { log(`  cand ${m.id} ${m.name}: ${c.name.slice(0, 70)} explicit=${c.explicit} multi=${c.multi} seeds=${c.seeds}`); continue; }
       c.film = m.name;
       const p = await probe(c);
-      if (!p.ok) { log(`  probe ${m.id} ${c.name.slice(0, 50)}: ${p.err}`); continue; }
-      log(`  probe ${m.id} ${c.name.slice(0, 50)}: audio [${p.langs.join(',')}] ${Math.round(p.seconds / 60)}min`);
+      if (!p.ok) {
+        log(`  probe ${m.id} ${c.name.slice(0, 50)}: ${p.err}`);
+        // transient failures are not an answer: forget the attempt so the next run probes this release again
+        if (/TOO_MANY|429|HTTP 5\d\d|timeout|aborted|ECONN|fetch failed|NO_SERVER|not ready/i.test(p.err)) { entry.tried.pop(); entry.retry = true; }
+        continue;
+      }
+      log(`  probe ${m.id} ${c.name.slice(0, 50)}: audio [${p.langs.join(',')}] ${Math.round(p.seconds / 60)}min${p.p2p ? ' (p2p)' : ''}`);
       // a keyword release was matched by name only: its duration must fit this film's runtime
-      if (p.hebrew && c.kw && !durationFits(p.seconds, await runtimeOf(m.id))) { log(`  mismatch ${m.id} ${m.name}: file ${Math.round(p.seconds / 60)}min vs runtime ${runtimes.get(m.id)}min`); continue; }
+      if (p.hebrew && c.kw && !durationFits(p.seconds, await runtimeOf(m.id))) {
+        log(`  mismatch ${m.id} ${m.name}: file ${Math.round(p.seconds / 60)}min vs runtime ${runtimes.get(m.id)}min`);
+        await alldebridRelease(c);
+        continue;
+      }
       if (p.hebrew) {
-        proven.push({ hash: c.hash, fileIdx: c.fileIdx, rel: c.name.slice(0, 120), langs: p.langs, hebOnly: p.hebOnly, size: c.size || 0, ...(c.packFile ? { file: c.packFile.slice(0, 120) } : {}) });
+        proven.push({ hash: c.hash, fileIdx: c.fileIdx, rel: c.name.slice(0, 120), langs: p.langs, hebOnly: p.hebOnly, size: c.size || 0, ...(p.p2p ? { p2p: true } : {}), ...(c.packFile ? { file: c.packFile.slice(0, 120) } : {}) });
         // one Hebrew-default release is enough; keep probing briefly for a second (multi) option only if the first is huge
         if (p.hebOnly && proven.length >= 1) break;
         if (proven.length >= 2) break;
@@ -330,6 +383,9 @@ async function main() {
     for (const v of Object.values(JSON.parse(fs.readFileSync(CACHE, 'utf8')).items)) if (v.type === 'movie') universe[v.id] = { ...v, tags: ['top'] };
   }
   res.universe = universe;
+  if (ALLDEBRID_KEY && !NO_PROBE) await loadPreexisting();
+  // films whose last check hit a transient failure (e.g. AllDebrid MAGNET_TOO_MANY) are checked again
+  for (const [tt, v] of Object.entries(res.checked)) if (v.retry && !res.items[tt]) delete res.checked[tt];
   // keyword releases -> titles
   const kwByTitle = new Map();
   if (!ONLY || true) {
