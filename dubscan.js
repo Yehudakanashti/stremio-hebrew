@@ -328,6 +328,8 @@ function load() {
   catch { res = { items: {}, checked: {}, kw: {} }; }
   // a film proven through a multi-film pack before pack handling existed gets re-checked
   for (const [tt, v] of Object.entries(res.items)) if (PACK.test(v.rel || '') && !(v.dubs || []).some(d => d.file)) { delete res.items[tt]; delete res.checked[tt]; }
+  // the row shows only what plays over P2P: an entry proven only through AllDebrid that already failed a P2P check goes now
+  for (const [tt, v] of Object.entries(res.items)) if (v.miss && !(v.dubs || []).some(d => d.p2p)) delete res.items[tt];
   return res;
 }
 function save(res) {
