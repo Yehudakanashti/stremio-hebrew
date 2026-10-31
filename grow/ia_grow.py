@@ -16,7 +16,7 @@ QUERIES = ['identifier:*hebdub*', 'identifier:*heb-dub*', 'identifier:*hebrew-du
 VID = re.compile(r'\.(mp4|mkv|m4v|avi|mpg|mpeg|ogv)$', re.I)
 MARK = re.compile(r'h\.?dub|heb[ ._-]?dub|hebrew[ ._-]?dub|מדובב|דיבוב|עברית', re.I)
 HEBL = re.compile(r'^(he|heb|hebrew|iw)$', re.I)
-NOISE = re.compile(r'\b(19[3-9]\d|20[0-3]\d)\b|h\.?dub|heb[ ._-]?dub(bed)?|hebrew[ ._-]?dub(bed)?|hebrew|dubbed|dub\b|dvdrip|xvid|1080p?|720p?|480p|ntsc|pal|web[ ._-]?dl|dsnp|also|english|ddp?\s*5\.?1|atmos|h\.?\s*264|x264|full movie|the movie|מדובב לעברית|מדובב|לעברית|בעברית|עברית|אנגלית|כתוביות|ו?וכתוביות|דיבוב|סרט|[\[\](){}|!+_.,:;\-–—/\\"״׳\']', re.I)
+NOISE = re.compile(r'\b(19[3-9]\d|20[0-3]\d)\b|h\.?dub|heb[ ._-]?dub(bed)?|hebrew[ ._-]?dub(bed)?|hebrew|dubbed|dub\b|dvdrip|xvid|1080p?|720p?|480p|ntsc|pal|web[ ._-]?dl|dsnp|also|english|ddp?\s*5\.?1|atmos|h\.?\s*264|x264|full movie|the movie|נתי מדיה|מדובב לעברית|מדובב|לעברית|בעברית|עברית|אנגלית|כתוביות|ו?וכתוביות|דיבוב|סרט|[\[\](){}|!+_.,:;\-–—/\\"״׳\']', re.I)
 
 
 def search_items():
@@ -139,6 +139,9 @@ def discover(budget=900):
         if time.time() - t0 > budget:
             break
         st = seen.setdefault(ident, {'files': {}})
+        if not (MARK.search(ident) or MARK.search(items[ident]) or re.search('[א-ת]', items[ident])):
+            st.update(done=True, res='not a Hebrew item')  # "danish dubbing" and the like match the broad queries
+            continue
         meta = get_json(f'https://archive.org/metadata/{ident}', timeout=60)
         if meta is None:
             st['tries'] = st.get('tries', 0) + 1  # restricted items answer 401/403 every time, a timeout only once

@@ -113,15 +113,23 @@ def title_match(he, title):
     return True
 
 
+def _plain(t):
+    # Hebrew spelling varies with or without vowel letters ("בלאגן"/"בלגן"): compare words without inner א/ו/י
+    return t[0] + re.sub('[אוי]', '', t[1:]) if len(t) > 2 and 'א' <= t[0] <= 'ת' else t
+
+
 def names_agree(a, b):
     # both directions: most words of each name appear in the other, and the numbers are the same
     ta, tb = tok(a), tok(b)
     if not ta or not tb:
         return False
-    sa, sb = set(ta), set(tb)
     if {t for t in ta if t.isdigit()} != {t for t in tb if t.isdigit()}:
         return False
-    return sum(t in sb for t in ta) >= max(1, round(len(ta) * 0.8)) and sum(t in sa for t in tb) >= max(1, round(len(tb) * 0.6))
+
+    def agree(x, y):
+        sx, sy = set(x), set(y)
+        return sum(t in sy for t in x) >= max(1, round(len(x) * 0.8)) and sum(t in sx for t in y) >= max(1, round(len(y) * 0.6))
+    return agree(ta, tb) or agree([_plain(t) for t in ta], [_plain(t) for t in tb])
 
 
 _model = None
