@@ -14,7 +14,7 @@ QUERIES = ['identifier:*hebdub*', 'identifier:*heb-dub*', 'identifier:*hebrew-du
            'description:(מדובב לעברית)', 'title:(מדובב)', 'title:(hebrew) AND title:(dub*)', 'description:(hebrew dub)',
            'subject:(סרט מדובב)', 'subject:(דיבוב)', 'title:(hebdub)', 'title:(דיבוב)']
 VID = re.compile(r'\.(mp4|mkv|m4v|avi|mpg|mpeg|ogv)$', re.I)
-MARK = re.compile(r'h\.?dub|heb[ ._-]?dub|hebrew[ ._-]?dub|מדובב|דיבוב|עברית', re.I)
+MARK = re.compile(r'\bh\.?dub|heb[ ._-]?dub|hebrew[ ._-]?dub|מדובב|דיבוב|עברית', re.I)  # \b: "danish.dubbing" is not h.dub
 HEBL = re.compile(r'^(he|heb|hebrew|iw)$', re.I)
 NOISE = re.compile(r'\b(19[3-9]\d|20[0-3]\d)\b|h\.?dub|heb[ ._-]?dub(bed)?|hebrew[ ._-]?dub(bed)?|hebrew|dubbed|dub\b|dvdrip|xvid|1080p?|720p?|480p|ntsc|pal|web[ ._-]?dl|dsnp|also|english|ddp?\s*5\.?1|atmos|h\.?\s*264|x264|full movie|the movie|נתי מדיה|מדובב לעברית|מדובב|לעברית|בעברית|עברית|אנגלית|כתוביות|ו?וכתוביות|דיבוב|סרט|[\[\](){}|!+_.,:;\-–—/\\"״׳\']', re.I)
 
