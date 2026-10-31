@@ -203,10 +203,11 @@ let dubrelCache = { at: 0, films: {} };
 async function loadDubRel() {
   if (Date.now() - dubrelCache.at < INDEX_TTL_MS && dubrelCache.at) return dubrelCache;
   try {
-    const r = await fetch(DUBREL_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    // an error must not be cached (a 404 during a Pages rebuild would blank the feed for minutes)
+    const r = await fetch(DUBREL_URL, { cf: { cacheTtlByStatus: { '200-299': 300, '400-599': 0 }, cacheEverything: true } });
     if (r.ok) dubrelCache = { at: Date.now(), films: (await r.json()).films || {} };
-    else dubrelCache.at = Date.now();
-  } catch { dubrelCache.at = Date.now(); }
+    else dubrelCache.at = Date.now() - INDEX_TTL_MS + 30000;
+  } catch { dubrelCache.at = Date.now() - INDEX_TTL_MS + 30000; }
   return dubrelCache;
 }
 const xmlEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -309,8 +310,9 @@ async function trailerStreams(type, id) {
   }
   const hints = { notWebReady: true, bingeGroup: 'trailer' };
   // a proven Hebrew-dubbed release goes first (this addon is first in his list, so it is the first stream he sees)
-  const dubbed = type === 'movie' ? (await loadDub()).items[id] : null;
-  const first = dubbed ? dubStreams(dubbed) : [];
+  // Our own P2P dub stream is off (31.10.26): old Hebrew-dub torrents have 0-2 peers and stall on the TV.
+  // The dubbed releases now reach him through AIOStreams (Torznab feed below) and play via his debrid service.
+  const first = [];
   // `title` only: newer stremio-core treats `title` as an alias of `description` and rejects a stream carrying both.
   if (heb.length) return [...first, { name: '🎬 טריילר', title: 'טריילר מתורגם לעברית', ytId: heb[0], behaviorHints: hints }];
   const found = (await loadYt()).items[id];
