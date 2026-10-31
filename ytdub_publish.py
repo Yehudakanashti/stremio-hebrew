@@ -43,7 +43,7 @@ def meta(tt, he_name=None):
         'enName': c.get('name') or n.get('en'),
         'poster': f'https://images.metahub.space/poster/small/{tt}/img',
         'description': (he.get('description') if HEB.search(he.get('description') or '') else None) or c.get('description') or '',
-        'year': str(c.get('year') or n.get('year') or '')[:4], 'released': c.get('released'),
+        'year': str(c.get('year') or he.get('year') or n.get('year') or '')[:4], 'released': c.get('released') or he.get('released'),
         'genres': c.get('genres') or cd.get('genres'), 'imdbRating': c.get('imdbRating'),
         'popRank': cd.get('popRank', 99999),
     }
@@ -130,6 +130,13 @@ for tt in list(items):
     if not m['yt'] and not m.get('urls'):
         print('no source left, dropped', tt, m.get('name'))
         del items[tt]
+# the row is sorted by release date and a film with no date sinks to its end: a film Cinemeta does not know
+# (Stan Lee's Mighty 7, The Knight and the Princess) takes TMDB he-IL's date
+for m in items.values():
+    if not m.get('released'):
+        he = get(TMDB_HE.format(m['id']))
+        y = m.get('year') or str(he.get('year') or he.get('releaseInfo') or '')[:4]
+        m['year'], m['released'] = y, he.get('released') or (f'{y}-01-01T00:00:00.000Z' if y else None)
 if items != old:  # unchanged rows keep their file (and date), so a round with nothing new commits nothing
     json.dump({'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'items': items},
               open(OUT, 'w', encoding='utf-8', newline='\n'), ensure_ascii=False)
