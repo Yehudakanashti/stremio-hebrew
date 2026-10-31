@@ -338,7 +338,8 @@ async function trailerStreams(type, id) {
     const dubbed = (await loadDub()).items[id];
     if (dubbed && dubbed.ytOnly && Array.isArray(dubbed.yt)) {
       for (const v of dubbed.yt.slice(0, 2)) {
-        first.push({ name: '🗣️ דיבוב עברית', title: `סרט מלא בדיבוב עברית${v.q ? ` · ${v.q}` : ''}`, ytId: v.id, behaviorHints: { notWebReady: true, bingeGroup: 'hebdub-yt' } });
+        // Stremio's YouTube player sometimes fails the first open ("תקלה במהירות ניגון") and plays on the second
+        first.push({ name: '🗣️ דיבוב עברית', title: `סרט מלא בדיבוב עברית (יוטיוב)\nאם מופיעה תקלה, לחצו שוב`, ytId: v.id, behaviorHints: { notWebReady: true, bingeGroup: 'hebdub-yt' } });
       }
     }
   }
