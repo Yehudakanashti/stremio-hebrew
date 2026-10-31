@@ -6,3 +6,5 @@ first_pass.log
 alldebrid.key
 dubs_job.log
 dubs_job.lock
+adgrow.log
+data/adgrow_state.json
