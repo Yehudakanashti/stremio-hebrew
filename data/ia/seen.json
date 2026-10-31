@@ -5280,13 +5280,13 @@
  "hebrew-dub-maya-the-bee": {
   "files": {
    "Maya 1-1.m4v": {
-    "res": "opens eng"
+    "res": "not identified"
    },
    "Maya 2-1.m4v": {
-    "res": "opens eng"
+    "res": "not identified"
    },
    "Maya 3-1.m4v": {
-    "res": "opens eng"
+    "res": "not identified"
    }
   },
   "done": true,
@@ -5298,31 +5298,10 @@
   "at": "2026-10-31"
  },
  "lucky.luke.tv.series.danish.dubbing": {
-  "files": {
-   "Lucky.Luke.Daisy.Town.1982.DANISH.VHS.x264.FLAC..EGMONT-79078.mkv": {
-    "res": "opens eng"
-   },
-   "Lucky.Luke.Den.Syngende.Traad.1983.DANISH.VHS.x264.FLAC.EGMONT-79044.mkv": {
-    "res": "opens eng"
-   },
-   "Lucky.Luke.Grønskollingen.1983.DANISH.VHS.x264.FLAC.EGMONT-79302.mkv": {
-    "res": "opens eng"
-   },
-   "Lucky.Luke.Lovløse.i.Lænker.1983.DANISH.VHS.x264.FLAC.EGMONT-79011.mkv": {
-    "res": "opens eng"
-   },
-   "Lucky.Luke.Møder.Jesse.James.1984.DANISH.VHS.x264.FLAC.EGMONT-79300.mkv": {
-    "res": "opens eng"
-   },
-   "Lucky.Luke.Rider.Igen.1983.DANISH.VHS.x264.FLAC.EGMONT-KV79010-03.mkv": {
-    "res": "opens eng"
-   },
-   "Lucky.Luke.Spor.Over.Praerien.1984.DANISH.VHS.x264.FLAC.EGMONT-79301.mkv": {
-    "res": "opens eng"
-   }
-  },
+  "files": {},
   "done": true,
-  "at": "2026-10-31"
+  "at": "2026-10-31",
+  "res": "not a Hebrew item"
  },
  "PostmanPatHebrewDub": {
   "files": {},
@@ -5332,7 +5311,8 @@
  "20260507_20260507_1411": {
   "files": {
    "בלאגן בחווה - מדובב .mp4": {
-    "res": "not identified"
+    "res": "ok",
+    "tt": "tt0414853"
    }
   },
   "done": true,
@@ -5445,7 +5425,7 @@
  "20240515_20240515_1203": {
   "files": {
    "נתי מדיה המסע המופלא מדובב.mp4": {
-    "res": "not identified"
+    "res": "ambiguous name"
    }
   },
   "done": true,
@@ -5617,6 +5597,306 @@
   "at": "2026-10-31"
  },
  "glitterforcedokidokiepisode11": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode10": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode9": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode7": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode8": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode6": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode5": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode4": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode3": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode1": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforcedokidokiepisode2": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode40": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode39": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode38": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode37": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode36": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode35": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode34": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode33": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode32": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode31": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode30": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode29": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode28": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode27": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "smileprecureepisode26": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode24": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode22_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode25": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode23_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode20_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode18_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode21_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode17_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode19_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode16": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode15": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode13": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode14": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode12": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode11": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode10": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode9": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode8": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode7": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode6_202411": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode05": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode1_20241111": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode03": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "glitterforceepisode02": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "milo-hebrew": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "eyewitness-nature-series-arctic-and-antarctic-hebrew": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "tec-the-tractor-intro-hebrew": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "the-big-comfy-couch-textless-end-credits-seasons-1-5-1992-1996-hebrew-variant-1": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "noddys-toyland-adventures-intro-1992-2001-blank": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "the-hoobs-intro-hebrew": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "the-adventures-of-pow-wow-the-indian-boy-episode": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "20201116_20201116_2251": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "oobi-hebrew-intro-nickelodeon-israel": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "3-2024-1080-p-web-dl-by-sha-01.35.59.421-01.37.54.662": {
+  "files": {},
+  "done": true,
+  "at": "2026-10-31"
+ },
+ "20260512_20260512_1130": {
   "files": {},
   "done": true,
   "at": "2026-10-31"

@@ -997,5 +997,34 @@
   "file": "1080p 2014 המופלאים של סטן לי מדובב.mkv",
   "at": "2026-10-31T14:06:45",
   "note": "auto: Hebrew opens by default, strict identity, 4-clip Whisper"
+ },
+ "tt0414853": {
+  "ident": "20260507_20260507_1411",
+  "url": "https://archive.org/download/20260507_20260507_1411/%D7%91%D7%9C%D7%90%D7%92%D7%9F%20%D7%91%D7%97%D7%95%D7%95%D7%94%20-%20%D7%9E%D7%93%D7%95%D7%91%D7%91%20.mp4",
+  "title": "בלאגן בחווה מדובב",
+  "mins": 85,
+  "seen": [
+   [
+    "he",
+    0.92
+   ],
+   [
+    "en",
+    0.31
+   ],
+   [
+    "fr",
+    0.32
+   ],
+   [
+    "he",
+    0.91
+   ]
+  ],
+  "he": "בלגן בחווה",
+  "y": 2006,
+  "file": "בלאגן בחווה - מדובב .mp4",
+  "at": "2026-10-31T14:19:11",
+  "note": "auto: Hebrew opens by default, strict identity, 4-clip Whisper"
  }
 }
