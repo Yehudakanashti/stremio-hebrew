@@ -1,7 +1,7 @@
 # docs/ytdub.json from the YouTube dub pipeline (scratchpad yt/verified.json + names.json): full Hebrew-dubbed films on
 # YouTube whose speech was detected as Hebrew by Whisper on clips cut from inside the film. Each entry carries the
 # catalog meta the Worker's dubbed row needs (Hebrew name/synopsis from TMDB he-IL, poster, year, rating).
-# Usage: python ytdub_publish.py <dir with verified.json and names.json>
+# Usage: python ytdub_publish.py <dir with verified.json and names.json> [<dir with ia_verified.json>]
 import json, os, re, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # Hebrew/emoji titles on a cp1255 console
@@ -30,26 +30,31 @@ def get(url):
             time.sleep(2 * (a + 1))
     return {}
 
-def build(tt):
-    v = ver[tt]['ok']
+def meta(tt, he_name=None):
     prev = old.get(tt, {})
-    keep = [x for x in prev.get('yt', []) if x['id'] != v['id']]
-    yt = [{'id': v['id'], 'ch': v.get('ch', ''), 'dur': v.get('dur'), 'title': v.get('title', '')[:120]}] + keep
     if prev.get('name') and HEB.search(prev.get('name', '')):
-        return tt, {**prev, 'yt': yt[:2]}
+        return dict(prev)
     he, c = get(TMDB_HE.format(tt)), get(CINE.format(tt))
     n = names.get(tt, {})
     cd = cands.get(tt, {})
-    return tt, {
+    return {
         'id': tt, 'type': 'movie',
-        'name': (he.get('name') if HEB.search(he.get('name') or '') else None) or n.get('he') or c.get('name') or n.get('en'),
+        'name': (he.get('name') if HEB.search(he.get('name') or '') else None) or n.get('he') or he_name or c.get('name') or n.get('en'),
         'enName': c.get('name') or n.get('en'),
         'poster': f'https://images.metahub.space/poster/small/{tt}/img',
         'description': (he.get('description') if HEB.search(he.get('description') or '') else None) or c.get('description') or '',
         'year': str(c.get('year') or n.get('year') or '')[:4], 'released': c.get('released'),
         'genres': c.get('genres') or cd.get('genres'), 'imdbRating': c.get('imdbRating'),
-        'popRank': cd.get('popRank', 99999), 'yt': yt[:2], 'ytAt': ver[tt].get('at'),
+        'popRank': cd.get('popRank', 99999),
     }
+
+def build(tt):
+    v = ver[tt]['ok']
+    m = meta(tt, v.get('he'))
+    keep = [x for x in m.get('yt', []) if x['id'] != v['id']]
+    m['yt'] = ([{'id': v['id'], 'ch': v.get('ch', ''), 'dur': v.get('dur'), 'title': v.get('title', '')[:120]}] + keep)[:2]
+    m['ytAt'] = ver[tt].get('at')
+    return tt, m
 
 ok = [tt for tt, v in ver.items() if v.get('ok')]
 tok = lambda s: set(t for t in re.sub(r'[^0-9a-zא-ת]+', ' ', str(s or '').lower()).split() if len(t) > 1)
@@ -96,6 +101,16 @@ with ThreadPoolExecutor(max_workers=4) as ex:
     items = dict(ex.map(build, ok))
 for tt, v in old.items():  # keep earlier proven films (a later run may only add)
     items.setdefault(tt, v)
+# archive.org direct files (scratchpad ia/ia_verified.json, same Whisper proof): offered before YouTube
+IA = sys.argv[2] if len(sys.argv) > 2 else None
+if IA and os.path.exists(os.path.join(IA, 'ia_verified.json')):
+    for tt, v in json.load(open(os.path.join(IA, 'ia_verified.json'), encoding='utf-8')).items():
+        if not tt.startswith('tt') or not isinstance(v, dict):
+            continue
+        m = items.get(tt) or meta(tt, v.get('he'))
+        m['urls'] = [{'url': v['url'], 'file': v.get('file'), 'mins': v.get('mins')}]
+        m.setdefault('yt', [])
+        items[tt] = m
 json.dump({'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'items': items},
           open(OUT, 'w', encoding='utf-8', newline='\n'), ensure_ascii=False)
 print('ytdub: %d films' % len(items))
