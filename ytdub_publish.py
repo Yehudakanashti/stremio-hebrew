@@ -108,7 +108,7 @@ if IA and os.path.exists(os.path.join(IA, 'ia_verified.json')):
         if not tt.startswith('tt') or not isinstance(v, dict):
             continue
         m = items.get(tt) or meta(tt, v.get('he'))
-        m['urls'] = [{'url': v['url'], 'file': v.get('file'), 'mins': v.get('mins')}]
+        m['urls'] = v.get('urls') or [{'url': v['url'], 'file': v.get('file'), 'mins': v.get('mins')}]
         m.setdefault('yt', [])
         items[tt] = m
 json.dump({'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'items': items},
