@@ -88,6 +88,7 @@ async function cinemeta(tt) {
 function git(...a) { return spawnSync('git', a, { cwd: ROOT, encoding: 'utf8', windowsHide: true }); }
 
 function publish(added) {
+  spawnSync(process.execPath, [path.join(ROOT, 'dubhe.js')], { cwd: ROOT, windowsHide: true, timeout: 300000 });
   spawnSync(process.execPath, [path.join(ROOT, 'dubrel.js')], { cwd: ROOT, windowsHide: true });
   git('add', 'docs/dub.json', 'docs/dubrel.json', 'data/dub_pending.json');
   const msg = `dub row: +${added.length} film(s) that open in Hebrew and play now (${added.join(', ')})\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`;

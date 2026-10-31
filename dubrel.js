@@ -42,10 +42,10 @@ let dub = { items: {} };
 try { dub = JSON.parse(fs.readFileSync(DUB, 'utf8')); } catch { /* none yet */ }
 for (const [tt, v] of Object.entries(dub.items || {})) {
   for (const d of v.dubs || [{ hash: v.hash, rel: v.rel, size: v.size }]) {
-    if (d && d.hash) add(tt, v, { h: String(d.hash).toLowerCase(), n: String(d.rel || v.rel || v.name).slice(0, 160), mb: Number(d.size) || 0, s: 0, p: true, d: 1, proved: true });
+    if (d && d.hash) add(tt, { ...v, name: v.enName || v.name }, { h: String(d.hash).toLowerCase(), n: String(d.rel || v.rel || v.enName || v.name).slice(0, 160), mb: Number(d.size) || 0, s: 0, p: true, d: 1, proved: true });
   }
   if (!films[tt]) continue;
-  films[tt].n = v.name || films[tt].n;
+  films[tt].n = v.enName || v.name || films[tt].n;
   films[tt].y = Number(v.year) || films[tt].y;
 }
 // waiting films (cached on AllDebrid, not yet playable): only those whose Hebrew track is the first one
