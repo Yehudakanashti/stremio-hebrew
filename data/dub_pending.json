@@ -210,65 +210,6 @@
    "pendingWhy": "cached on AllDebrid but cannot be added now (MAGNET_TOO_MANY); default audio track not yet checked",
    "notDefault": false
   },
-  "tt1449283": {
-   "id": "tt1449283",
-   "type": "movie",
-   "name": "Winnie the Pooh",
-   "poster": "https://images.metahub.space/poster/small/tt1449283/img",
-   "year": "2011",
-   "released": "2011-08-29T00:00:00.000Z",
-   "genres": [
-    "Animation",
-    "Adventure",
-    "Comedy"
-   ],
-   "popRank": 99999,
-   "dubs": [
-    {
-     "hash": "f206900674ec49fb67ea69790edb60e40c3e14dd",
-     "fileIdx": 0,
-     "rel": "Walt Disney Animation Studios Multi 2009 - 2013 Part 5 Burntodisc",
-     "langs": [
-      "eng",
-      "bul",
-      "heb",
-      "lat",
-      "por",
-      "por",
-      "ron",
-      "rus",
-      "ukr",
-      "swe"
-     ],
-     "hebOnly": false,
-     "size": 1713,
-     "ad": true,
-     "file": "Walt Disney Animation Studios Multi 2009 - 2013 Part 5 Burntodisc/2011 Winnie the Pooh - Eng Bul Hew Lat Por Bra Rom Rus Ukr Sve Subs 6.mp4"
-    }
-   ],
-   "rel": "Walt Disney Animation Studios Multi 2009 - 2013 Part 5 Burntodisc",
-   "hash": "f206900674ec49fb67ea69790edb60e40c3e14dd",
-   "fileIdx": 27,
-   "langs": [
-    "eng",
-    "bul",
-    "heb",
-    "lat",
-    "por",
-    "por",
-    "ron",
-    "rus",
-    "ukr",
-    "swe"
-   ],
-   "hebOnly": false,
-   "at": 1793397091486,
-   "adAt": 1793427905421,
-   "description": "While searching for honey, Pooh and his friends embark on an adventure to find Eeyore's missing tail and rescue Christopher Robin from an unknown monster called The Backson.",
-   "imdbRating": "7.1",
-   "pendingWhy": "cached on AllDebrid but cannot be added now (MAGNET_TOO_MANY); default audio track not yet checked",
-   "notDefault": false
-  },
   "tt11819890": {
    "id": "tt11819890",
    "type": "movie",
