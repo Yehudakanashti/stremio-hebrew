@@ -24,14 +24,21 @@ const TYPES = ['movie', 'series'];
 const TOP_PAGES = 60;      // Cinemeta's whole Popular catalog (~3,000 titles), not just its first 1,200
 const RATING_PAGES = 60;   // Cinemeta's Featured catalog
 const YEAR_PAGES = 20;
-const KTUVIT_PAGES = 5;    // the 500 films whose subtitles were added or updated last on ktuvit.me
+const KTUVIT_PAGES = 40;   // the 4,000 films whose subtitles were added or updated last on ktuvit.me (its addon is dead, this list is the only Ktuvit signal)
+const GENRE_PAGES = 20;    // Cinemeta's per-genre Popular lists (Discover > genre), 1,000 titles per genre; they run ~12,000 deep
+const TMDB_PAGES = 25;     // the TMDB addon's Popular / Trending / Latest rows (what his Stremio home shows in Hebrew), 500 titles each
+const CINEMETA_GENRES = {
+  movie: ['Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western'],
+  series: ['Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Reality-TV', 'Talk-Show', 'Game-Show'],
+};
+const TMDB_CATALOGS = ['tmdb.top', 'tmdb.trending', 'tmdb.latest'];
 const JW_PAGES = 22;       // every title of the last two years on Israeli streaming services (~2,200 films, ~930 series)
 const TIME_BUDGET_MS = Number(process.env.TIME_BUDGET_MIN || 70) * 60e3;  // the Actions job is killed at 90 min
 const CONCURRENCY = 6;
 const RECHECK_HAS_MS = 7 * 24 * 3600e3;
 const RECHECK_RECENT_MS = 3 * 3600e3;
 const RECHECK_OLD_MS = 12 * 3600e3;
-const MAX_CHECKS = Number(process.env.MAX_CHECKS || 8000);  // with the dead Ktuvit addon skipped a check takes ~0.5 s: 8,000 in ~20 min
+const MAX_CHECKS = Number(process.env.MAX_CHECKS || 20000);  // ~7 checks/s with the dead Ktuvit addon skipped; the time budget is the real limit
 const PAGE = 100;
 const STATIC_PAGES = 5;
 
@@ -217,6 +224,43 @@ async function extraWanted(type, cache) {
     for (const t of jw) { const w = want(t.id); w.tags.add('jw'); w.jwHe = w.jwHe || t.jwHe; }
     log(`justwatch ${type}: ${jw.length} titles, ${jw.filter(t => t.jwHe).length} with Hebrew subtitles on the service`);
   } catch (e) { log(`justwatch ${type}: ${e.message}`); }
+  // the TMDB addon's rows (ids are tmdb:NNN; its meta carries the IMDb id, remembered in cache.tmap)
+  cache.tmap = cache.tmap || {};
+  const tmdbIds = new Set();
+  for (const cat of TMDB_CATALOGS) {
+    for (let p = 0; p < TMDB_PAGES; p++) {
+      try {
+        const d = await getJson(`${TMDB_HE}/catalog/${type}/${cat}/skip=${p * 20}.json`);
+        if (!d.metas || !d.metas.length) break;
+        for (const m of d.metas) if (m.id) tmdbIds.add(m.id);
+      } catch (e) { log(`tmdb ${type} ${cat} ${p}: ${e.message}`); break; }
+    }
+  }
+  // 2 at a time with a pause: 6 parallel lookups made the addon refuse most of them (a refusal is not cached, a real answer is)
+  let tmdbMapped = 0, tmdbFetched = 0, tmdbErrors = 0, firstErr = '';
+  await pool([...tmdbIds], 2, async id => {
+    let tt = /^tt\d+$/.test(id) ? id : null;
+    if (!tt) {
+      const known = cache.tmap[id];
+      if (known && (known.id || Date.now() - known.at < 30 * 86400e3)) tt = known.id;
+      else {
+        tmdbFetched++;
+        let meta = null;
+        for (let a = 0; a < 2 && !meta; a++) {
+          try { meta = (await getJson(`${TMDB_HE}/meta/${type}/${id}.json`)).meta || {}; }
+          catch (e) { if (!firstErr) firstErr = e.message; await new Promise(r => setTimeout(r, 1500)); }
+        }
+        if (!meta) { tmdbErrors++; return; }
+        tt = /^tt\d+$/.test(meta.imdb_id || '') ? meta.imdb_id : null;
+        cache.tmap[id] = { id: tt, at: Date.now() };
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+    if (!tt) return;
+    tmdbMapped++;
+    want(tt).tags.add('tmdb');
+  });
+  log(`tmdb rows ${type}: ${tmdbIds.size} titles, ${tmdbMapped} with an IMDb id (${tmdbFetched} looked up now, ${tmdbErrors} refused${firstErr ? ': ' + firstErr : ''})`);
   return wanted;
 }
 
@@ -254,7 +298,19 @@ async function fetchCandidates(type, cache) {
       add(d.metas, 'featured');
     } catch (e) { log(`cinemeta ${type} featured ${p}: ${e.message}`); }
   }
-  // beyond Cinemeta's lists: ktuvit.me's newest subtitles and the Israeli streaming catalogs
+  // Discover > genre: each genre's own Popular list runs far deeper than the global one
+  const beforeGenres = out.size;
+  await pool(CINEMETA_GENRES[type] || [], 4, async genre => {
+    for (let p = 0; p < GENRE_PAGES; p++) {
+      try {
+        const d = await getJson(`${CINEMETA}/catalog/${type}/top/genre=${encodeURIComponent(genre)}&skip=${p * 50}.json`);
+        if (!d.metas || !d.metas.length) break;
+        add(d.metas, 'genre');
+      } catch (e) { log(`cinemeta ${type} ${genre} ${p}: ${e.message}`); break; }
+    }
+  });
+  log(`${type}: genre lists added ${out.size - beforeGenres} titles beyond Popular/Featured/New`);
+  // beyond Cinemeta's lists: ktuvit.me's newest subtitles, the Israeli streaming catalogs and the TMDB addon's rows
   const extra = await extraWanted(type, cache);
   const flags = w => ({ ktuvitFiles: w.ktuvitFiles, jwHe: w.jwHe });
   const fresh = [];
@@ -269,7 +325,7 @@ async function fetchCandidates(type, cache) {
     if (!m) { unknown++; return; }
     out.set(id, { ...m, ...flags(extra.get(id)), _popRank: 99999, _tags: extra.get(id).tags });
   });
-  log(`${type}: ${extra.size} titles from ktuvit/justwatch, ${fresh.length} beyond Cinemeta's lists, metas fetched ${fetched}, unknown ${unknown}`);
+  log(`${type}: ${extra.size} titles from ktuvit/justwatch/tmdb, ${fresh.length} beyond Cinemeta's lists, metas fetched ${fetched}, unknown ${unknown}`);
   return [...out.values()];
 }
 
@@ -317,7 +373,8 @@ function needsCheck(e, now) {
 function toMeta(m) {
   return {
     id: m.id, type: m.type, name: m.name, poster: m.poster, posterShape: 'poster',
-    description: m.description, releaseInfo: m.year ? String(m.year) : undefined,
+    description: m.description ? String(m.description).slice(0, 400) : m.description,  // index.json is parsed by the Worker whole; keep it lean
+    releaseInfo: m.year ? String(m.year) : undefined,
     imdbRating: m.imdbRating, genres: m.genres,
   };
 }
