@@ -37,7 +37,7 @@ const TIME_BUDGET_MS = Number(process.env.TIME_BUDGET_MIN || 70) * 60e3;  // the
 const CONCURRENCY = 6;
 const RECHECK_HAS_MS = 7 * 24 * 3600e3;
 const RECHECK_RECENT_MS = 3 * 3600e3;
-const RECHECK_OLD_MS = 12 * 3600e3;
+const RECHECK_OLD_MS = 72 * 3600e3;
 const MAX_CHECKS = Number(process.env.MAX_CHECKS || 20000);  // ~7 checks/s with the dead Ktuvit addon skipped; the time budget is the real limit
 const PAGE = 100;
 const STATIC_PAGES = 5;
@@ -83,8 +83,8 @@ async function notify(items) {
 }
 
 function loadCache() {
-  try { const d = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); return { items: d.items || {}, lastScanEnd: d.lastScanEnd || null, kmap: d.kmap || {} }; }
-  catch { return { items: {}, lastScanEnd: null, kmap: {} }; }
+  try { const d = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); return { items: d.items || {}, lastScanEnd: d.lastScanEnd || null, kmap: d.kmap || {}, tmap: d.tmap || {} }; }
+  catch { return { items: {}, lastScanEnd: null, kmap: {}, tmap: {} }; }
 }
 
 async function getJson(url, timeoutMs = 20000) {

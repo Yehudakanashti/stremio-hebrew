@@ -15,21 +15,24 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 200
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node scan.js
+        timeout-minutes: 115
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       - name: hebrew titles and synopses
         run: node enrich.js
+        timeout-minutes: 40
         continue-on-error: true
       - name: commit results
+        if: always()
         run: |
           git config user.name "scan-bot"
           git config user.email "scan-bot@users.noreply.github.com"

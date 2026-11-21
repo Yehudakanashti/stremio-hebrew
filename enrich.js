@@ -12,6 +12,7 @@ const SOURCE = (process.env.HE_SOURCE || 'https://tmdb.elfhosted.com/%7B%22langu
 const UA = 'stremio-hebrew enrich (github.com/Yehudakanashti/stremio-hebrew)';
 const DAY = 864e5;
 const CONCURRENCY = 3;
+const BUDGET_MS = Number(process.env.ENRICH_BUDGET_MIN || 30) * 60e3;  // the rest waits for the next run; the job's commit step must not be starved
 const HEBREW = /[֐-׿]/;
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -51,13 +52,16 @@ async function lookup(type, id) {
   const now = Date.now();
   const stale = e => !e || e.tr === undefined || (e.o ? now - e.at > 60 * DAY : now - e.at > 7 * DAY);
   let todo = items.filter(m => stale(he.items[m.id]));
+  todo.sort((a, b) => (he.items[a.id] ? 1 : 0) - (he.items[b.id] ? 1 : 0));  // titles with no Hebrew text yet come first
   const lim = process.argv.indexOf('--limit');
   if (lim > 0) todo = todo.slice(0, Number(process.argv[lim + 1]) || 20);
   log(`titles ${items.length}, to fetch ${todo.length}`);
 
   let done = 0, failed = 0, i = 0;
+  const started = Date.now();
   async function worker() {
     while (i < todo.length) {
+      if (Date.now() - started > BUDGET_MS) { if (i < todo.length) log(`time budget reached, ${todo.length - i} left for the next run`); i = todo.length; break; }
       const m = todo[i++];
       const e = await lookup(m.type, m.id);
       if (e) he.items[m.id] = e; else failed++;
