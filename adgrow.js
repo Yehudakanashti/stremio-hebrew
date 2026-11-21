@@ -243,5 +243,8 @@ async function round(state) {
     await sleep(ROUND_MS);
   } while (Date.now() < end);
   log('adgrow finished');
-  process.exit(0);
+  // Node 24 on Windows aborts inside process.exit() while fetch sockets are still closing (libuv async.c assertion);
+  // let the loop drain on its own and only force the exit if something keeps it alive
+  process.exitCode = 0;
+  setTimeout(() => process.exit(0), 5000).unref();
 })();

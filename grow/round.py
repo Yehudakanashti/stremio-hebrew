@@ -111,8 +111,8 @@ def main(force=None, ad=True):
         before = names_of(YTDUB)
         if ad:
             a = run(['node', os.path.join(REPO, 'adgrow.js'), '--once'], 1800)
-            if a and a.returncode != 0:
-                log('adgrow failed ' + (a.stderr or '')[-200:])
+            if a and a.returncode != 0 and 'adgrow finished' not in (a.stdout or ''):
+                log('adgrow failed ' + (a.stderr or '')[-200:])  # a crash after 'finished' is Node's exit bug, the work is done
         due =[(time.time() - state.get(k, 0) - h * 3600, k, f) for k, h, f in JOBS if k == force or (not force and time.time() - state.get(k, 0) >= h * 3600)]
         if due:
             _, key, job = max(due)  # the most overdue one
