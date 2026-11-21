@@ -43,7 +43,7 @@ const SERIES = [
 const MOVIES = [
   // Hebrew-DUBBED films (audio proven by dubscan.js, not subtitles). Items come from docs/dub.json, not the subs index.
   { id: 'heb-m-dubbed', name: '🗣️ דיבוב עברית מלא', dub: true, pick: (l, ctx) => Object.values((ctx && ctx.dub) || {}).sort((a, b) => byReleased(a, b) || byPop(a, b)) },
-  { id: 'heb-cinema-new', name: '🎞️ קולנוע: חדש בעברית', shape: 'landscape', pick: l => { const cut = Date.now() - 180 * 864e5; return l.filter(m => m.released && Date.parse(m.released) >= cut).sort((a, b) => ((b.hebrewSince || 0) - (a.hebrewSince || 0)) || byReleased(a, b)); } },
+  { id: 'heb-cinema-new', name: '🎞️ קולנוע: חדש בעברית', shape: 'landscape', pick: l => { const cut = Date.now() - 180 * 864e5; const day = m => Math.floor((m.hebrewSince || 0) / 864e5); return l.filter(m => m.released && Date.parse(m.released) >= cut).sort((a, b) => (day(b) - day(a)) || byReleased(a, b)); } },  // titles found on the same day go by release date, else a big scan's batch lands in check order
   { id: 'heb-m-new', name: '🔥 סרטים חדשים בעברית', pick: l => l.filter(isRecent).sort(byReleased) },
   { id: 'heb-m-top10', name: '🔟 טופ 10 סרטים בעברית', numbered: true, pick: l => l.slice().sort(byPop).slice(0, 10) },
   { id: 'heb-m-best', name: '🏆 הסרטים המדורגים ביותר', pick: l => l.filter(m => rate(m) >= 8).sort(byRating) },
