@@ -31,7 +31,7 @@ const CONCURRENCY = 6;
 const RECHECK_HAS_MS = 7 * 24 * 3600e3;
 const RECHECK_RECENT_MS = 3 * 3600e3;
 const RECHECK_OLD_MS = 12 * 3600e3;
-const MAX_CHECKS = Number(process.env.MAX_CHECKS || 4000);
+const MAX_CHECKS = Number(process.env.MAX_CHECKS || 8000);  // with the dead Ktuvit addon skipped a check takes ~0.5 s: 8,000 in ~20 min
 const PAGE = 100;
 const STATIC_PAGES = 5;
 
@@ -284,11 +284,20 @@ async function checkSource(base, type, id) {
 }
 
 const SRC_STATS = {};
+// a source that fails 20 titles in a row is skipped for the rest of the run: the dead Ktuvit addon (504 since 1.11.26)
+// held every check for its 15 s timeout, so a 70-minute run checked only ~2,000 titles
+const SRC_DOWN = {}, SRC_FAILS = {};
 async function checkHebrew(e) {
   // OpenSubtitles is asked only when an Israeli streaming service offers Hebrew subtitles for the title (see HEB_SOURCES)
-  const names = Object.keys(HEB_SOURCES).filter(n => n !== 'opensubtitles' || e.jwHe);
+  const names = Object.keys(HEB_SOURCES).filter(n => !SRC_DOWN[n] && (n !== 'opensubtitles' || e.jwHe));
   const results = await Promise.all(names.map(n => checkSource(HEB_SOURCES[n], e.type, e.id)));
-  names.forEach((n, i) => { const s = SRC_STATS[n] = SRC_STATS[n] || { ok: 0, fail: 0, hebrew: 0 }; if (results[i] === null) s.fail++; else { s.ok++; if (results[i]) s.hebrew++; } });
+  names.forEach((n, i) => {
+    const s = SRC_STATS[n] = SRC_STATS[n] || { ok: 0, fail: 0, hebrew: 0 };
+    if (results[i] !== null) { s.ok++; SRC_FAILS[n] = 0; if (results[i]) s.hebrew++; return; }
+    s.fail++;
+    SRC_FAILS[n] = (SRC_FAILS[n] || 0) + 1;  // (++ on an unset key gives NaN and never trips)
+    if (SRC_FAILS[n] >= 20 && !SRC_DOWN[n]) { SRC_DOWN[n] = true; log(`${n} failed 20 titles in a row, skipped for the rest of this run`); }
+  });
   const sources = names.filter((n, i) => results[i] === true);
   // a film on ktuvit.me's own list has subtitles there even while the Ktuvit addon is down (it answered 504 from 1.11.26)
   if (e.ktuvitFiles > 0 && !sources.includes('ktuvit')) sources.push('ktuvit');
@@ -414,16 +423,21 @@ async function main() {
       const key = queue.shift();
       const e = cache.items[key];
       const r = await checkHebrew(e);
-      if (r.hasHebrew && !e.hasHebrew) {
-        found++;
-        e.hebrewSince = Date.now();
-        log(`NEW: ${e.type} ${e.name} (${e.id}) via ${r.sources.join(',')}`);
-        if (isTheatricalRecent(e) && !e.notifiedAt) { e.notifiedAt = Date.now(); toNotify.push(e); }
+      if (r.allFailed) {
+        e.allFailed = true;  // no source answered: what we knew about the title stays (an outage must not empty the rows)
+      } else {
+        if (r.hasHebrew && !e.hasHebrew) {
+          found++;
+          e.hebrewSince = Date.now();
+          log(`NEW: ${e.type} ${e.name} (${e.id}) via ${r.sources.join(',')}`);
+          if (isTheatricalRecent(e) && !e.notifiedAt) { e.notifiedAt = Date.now(); toNotify.push(e); }
+        }
+        e.hasHebrew = r.hasHebrew; e.sources = r.sources; e.allFailed = false;
       }
-      e.hasHebrew = r.hasHebrew; e.sources = r.sources; e.allFailed = r.allFailed; e.checkedAt = Date.now();
+      e.checkedAt = Date.now();
       done++;
       if (done % 100 === 0) { log(`checked ${done}`); save(); }
-      await new Promise(res => setTimeout(res, 100));
+      await new Promise(res => setTimeout(res, 400));  // 6 workers, ~6-8 requests/s to the subtitle addons, not more
     }
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));

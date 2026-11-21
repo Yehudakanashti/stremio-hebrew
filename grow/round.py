@@ -8,7 +8,7 @@
 #      (state files are backed up to git once a day)
 # Run by hand: py -3.10 grow\round.py [job] [--no-ad]   (job = force one job now, e.g. yt_broad; --no-ad skips AllDebrid)
 # Without the scheduled task: py -3.10 grow\round.py --loop --hours 240   (detached; stops on reboot)
-import os, subprocess, sys, time, traceback
+import calendar, json, os, subprocess, sys, time, traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import REPO, DATA, LOG, load, save, log
 import yt_grow, ia_grow, src_grow
@@ -95,6 +95,26 @@ def publish(state, before):
     log(f'published: {msg}')
 
 
+def kick_scan(state):
+    """GitHub starts the 3-hourly subtitle scan (scan.yml) only about 3 times a day (its cron is best effort), so a film
+    with new Hebrew subtitles could wait 8-11 hours: start the scan from here when the last run began over 3 hours ago
+    and none is running (gh is already used for the Pages build; the workflow's concurrency group queues a double start)."""
+    if time.time() - state.get('scan_kick', 0) < 3 * 3600:
+        return
+    r = run(['gh', 'run', 'list', '--workflow', 'scan.yml', '--limit', '1', '--json', 'status,createdAt'], 120)
+    if not r or r.returncode != 0:
+        return
+    last = (json.loads(r.stdout or '[]') or [{}])[0]
+    if last.get('status') in ('queued', 'in_progress', 'waiting', 'pending', 'requested'):
+        return
+    started = calendar.timegm(time.strptime(last['createdAt'], '%Y-%m-%dT%H:%M:%SZ')) if last.get('createdAt') else 0
+    if time.time() - started < 3 * 3600:
+        return
+    k = run(['gh', 'workflow', 'run', 'scan.yml'], 120)
+    state['scan_kick'] = time.time()
+    log('subtitle scan started on GitHub' + ('' if k and k.returncode == 0 else ' FAILED ' + ((k.stderr if k else '') or 'timeout')[-120:]))
+
+
 def main(force=None, ad=True):
     if os.path.exists(LOCK) and time.time() - os.path.getmtime(LOCK) < 3 * 3600:
         return  # the previous round is still working
@@ -109,6 +129,10 @@ def main(force=None, ad=True):
             git('rebase', '--abort')
             log('pull failed ' + (p.stderr or '')[-200:])
         before = names_of(YTDUB)
+        try:
+            kick_scan(state)
+        except Exception:
+            log('scan kick crashed: ' + traceback.format_exc()[-300:])
         if ad:
             a = run(['node', os.path.join(REPO, 'adgrow.js'), '--once'], 1800)
             if a and a.returncode != 0 and 'adgrow finished' not in (a.stdout or ''):
